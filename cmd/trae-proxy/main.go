@@ -259,6 +259,16 @@ func uninstallCmd() *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove CA from trust store, clean up hosts",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Stop daemon if running.
+			if pid, running := daemon.IsRunning(); running {
+				fmt.Printf("[uninstall] stopping daemon (pid %d)...\n", pid)
+				if err := daemon.StopDaemon(); err != nil {
+					fmt.Printf("[uninstall] WARNING: could not stop daemon: %v\n", err)
+				} else {
+					fmt.Println("[uninstall] daemon stopped")
+				}
+			}
+
 			dir, _ := config.ConfigDir()
 			caDir := filepath.Join(dir, "ca")
 
@@ -272,6 +282,18 @@ func uninstallCmd() *cobra.Command {
 
 			fmt.Println("[uninstall] removing hosts entry...")
 			hosts.Remove()
+
+			// Remove the binary itself.
+			exePath, err := os.Executable()
+			if err == nil {
+				exePath, err = filepath.EvalSymlinks(exePath)
+			}
+			if err == nil {
+				fmt.Printf("[uninstall] removing binary %s...\n", exePath)
+				if err := os.Remove(exePath); err != nil {
+					fmt.Printf("[uninstall] WARNING: could not remove binary: %v\n", err)
+				}
+			}
 
 			if purge {
 				fmt.Printf("[uninstall] removing config directory %s...\n", dir)

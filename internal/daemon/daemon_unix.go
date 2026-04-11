@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 func setSysProcAttr(cmd *exec.Cmd) {
@@ -23,6 +24,14 @@ func StopDaemon() error {
 	}
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
 		return err
+	}
+	// Wait for the process to actually exit so callers can immediately reuse the port.
+	// proc.Wait() only works for child processes; for daemons use polling.
+	for i := 0; i < 50; i++ {
+		if err := proc.Signal(syscall.Signal(0)); err != nil {
+			break // process gone
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	os.Remove(PIDPath())
 	return nil
