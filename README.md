@@ -1,4 +1,4 @@
-# trae-proxy
+# Trae Proxy
 
 让 Trae 接入任意 Anthropic Messages API 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
 
@@ -13,17 +13,11 @@
 ## 更新计划
 
 - 支持上游openai/兼容openai
-- 支持自动写入trae配置，实现一键安装
 
 ## 它解决什么问题
 
-Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
-
-- **协议转换**：Trae 发送 OpenAI Chat Completions 格式，大多数中转服务只接受 Anthropic Messages 格式
-- **模型名映射**：Trae 发送 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
-- **TLS 证书**：HTTPS 请求需要受信任的证书，但目标域名指向 localhost
-
-trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换，让这一切对 Trae 完全透明。
+Trae 不能自定义模型提供商，导致很多厂商的服务不能接入，也不能接入自己的反代、中转。
+为了避免本地的模型配置被篡改，Trae中模型的配置是保存在云端账号中的。
 
 ## 工作原理
 
@@ -43,9 +37,9 @@ trae-proxy :443  (内置 TLS，自签证书)
 
 **核心流程：**
 
-1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`
+1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`（默认设置的hack地址是`openrouter.ai`）
 2. trae-proxy 在 443 端口用自签证书接收 HTTPS 请求
-3. 去掉 Anthropic SDK 添加的 `/api` 路径前缀
+3. 处理服务商调用地址的映射
 4. 根据路由选择透传或协议转换
 5. 将请求转发到上游，流式响应实时回传
 
