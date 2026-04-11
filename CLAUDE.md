@@ -72,3 +72,18 @@ Three request paths in `_dispatch()`:
 
 - `.caddy.pid` / `.translator.pid` — PID files created by `proxy.sh`
 - `translator.log` — stdout/stderr of the translator process
+
+## Git remotes and branch rules
+
+This project has two remotes:
+
+| Remote | URL | Main branch |
+|--------|-----|-------------|
+| `origin` | `https://gitlab.chinacaring.com/zhangyc/trae-proxy.git` | `master` |
+| `github` | `git@github.com:DASungta/tare-proxy.git` | `main` |
+
+**Rules:**
+- Always push to GitLab (`origin`) on branch `master`
+- Always push to GitHub (`github`) on branch `main` via `git push github master:main`
+- Never push directly to `github/master` or `origin/main`
+- Go module path stays `github.com/zhangyc/trae-proxy` (internal import path, unrelated to the GitHub repo name)
