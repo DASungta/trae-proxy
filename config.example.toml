@@ -1,13 +1,22 @@
 # trae-proxy configuration
 
-# Upstream Anthropic Messages API address
+# Upstream API address
 upstream = "http://192.168.48.12:8080"
+
+# Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
+# conversion. "openai" directly forwards OpenAI Chat Completions — use this when
+# upstream is OpenAI-compatible (openrouter.ai, LM Studio, Ollama, most relays).
+upstream_protocol = "anthropic"
 
 # HTTPS listen address
 listen = ":443"
 
 # Domain to hijack via /etc/hosts
 hijack = "openrouter.ai"
+
+# When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
+# instead of returning the fake list from [models] below.
+# real_models = false
 
 # Model mapping: request model name → upstream model name
 # 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,17 +10,20 @@ import (
 )
 
 type Config struct {
-	Upstream string            `toml:"upstream"`
-	Listen   string            `toml:"listen"`
-	Hijack   string            `toml:"hijack"`
-	Models   map[string]string `toml:"models"`
+	Upstream         string            `toml:"upstream"`
+	UpstreamProtocol string            `toml:"upstream_protocol"` // "anthropic" (default) | "openai"
+	Listen           string            `toml:"listen"`
+	Hijack           string            `toml:"hijack"`
+	Models           map[string]string `toml:"models"`
+	RealModels       bool              `toml:"real_models"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		Upstream: "http://192.168.48.12:8080",
-		Listen:   ":443",
-		Hijack:   "openrouter.ai",
+		Upstream:         "http://192.168.48.12:8080",
+		UpstreamProtocol: "anthropic",
+		Listen:           ":443",
+		Hijack:           "openrouter.ai",
 		Models: map[string]string{
 			"anthropic/claude-sonnet-4.6": "claude-sonnet-4-6",
 			"anthropic/claude-sonnet-4-6": "claude-sonnet-4-6",
@@ -52,6 +56,14 @@ func Load(path string, overrides map[string]string) (*Config, error) {
 	}
 	if v, ok := overrides["hijack"]; ok && v != "" {
 		cfg.Hijack = v
+	}
+
+	cfg.UpstreamProtocol = strings.ToLower(strings.TrimSpace(cfg.UpstreamProtocol))
+	if cfg.UpstreamProtocol == "" {
+		cfg.UpstreamProtocol = "anthropic"
+	}
+	if cfg.UpstreamProtocol != "anthropic" && cfg.UpstreamProtocol != "openai" {
+		return nil, fmt.Errorf("invalid upstream_protocol %q (must be \"anthropic\" or \"openai\")", cfg.UpstreamProtocol)
 	}
 
 	return cfg, nil

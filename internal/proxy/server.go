@@ -13,12 +13,36 @@ import (
 )
 
 type Server struct {
-	Config     *config.Config
-	HTTPClient *http.Client
-	TLSConfig  *tls.Config
+	Config       *config.Config
+	HTTPClient   *http.Client
+	BypassClient *http.Client // uses public DNS (1.1.1.1), ignores /etc/hosts
+	TLSConfig    *tls.Config
 }
 
 func NewServer(cfg *config.Config) *Server {
+	// BypassClient: custom resolver via 1.1.1.1 to bypass the /etc/hosts hijack.
+	// PreferGo forces the pure-Go DNS resolver, enabling the custom Dial.
+	resolver := &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 5 * time.Second}
+			return d.DialContext(ctx, "udp", "1.1.1.1:53")
+		},
+	}
+	bypassDialer := &net.Dialer{
+		Resolver: resolver,
+		Timeout:  10 * time.Second,
+	}
+	bypassClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return bypassDialer.DialContext(ctx, network, addr)
+			},
+			TLSHandshakeTimeout: 10 * time.Second,
+		},
+	}
+
 	return &Server{
 		Config: cfg,
 		HTTPClient: &http.Client{
@@ -27,6 +51,7 @@ func NewServer(cfg *config.Config) *Server {
 				return http.ErrUseLastResponse
 			},
 		},
+		BypassClient: bypassClient,
 	}
 }
 
@@ -40,9 +65,13 @@ func (s *Server) Handler() http.Handler {
 
 		switch {
 		case r.Method == "GET" && norm == "v1/models":
-			HandleModels(s.Config)(w, r)
+			HandleModels(s)(w, r)
 		case r.Method == "POST" && norm == "v1/chat/completions":
-			HandleChatCompletions(s.Config, s.HTTPClient)(w, r)
+			if s.Config.UpstreamProtocol == "openai" {
+				HandleForward(s.Config, s.HTTPClient)(w, r)
+			} else {
+				HandleChatCompletions(s.Config, s.HTTPClient)(w, r)
+			}
 		default:
 			HandleForward(s.Config, s.HTTPClient)(w, r)
 		}
@@ -69,7 +98,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		srv.Shutdown(context.Background())
 	}()
 
-	fmt.Printf("[trae-proxy] listening on %s → %s\n", s.Config.Listen, s.Config.Upstream)
+	fmt.Printf("[trae-proxy] listening on %s → %s (upstream: %s)\n", s.Config.Listen, s.Config.Upstream, s.Config.UpstreamProtocol)
 
 	if s.TLSConfig != nil {
 		ln = tls.NewListener(ln, s.TLSConfig)

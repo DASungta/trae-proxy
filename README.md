@@ -1,29 +1,26 @@
 # trae-proxy
 
-让 Trae 接入任意 Anthropic Messages API 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
+让 Trae 接入任意 Anthropic 或 OpenAI 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
 
-**当前版本支持的上游类型：**
+**支持的上游类型：**
 - 各类 Claude 中转站（sub2api、one-api 等）
 - 支持 Anthropic Messages API 的云服务（讯飞星火、京东云等）
 - 自建的 Anthropic 协议兼容服务
-
-> 上游必须兼容 Anthropic Messages API（`POST /v1/messages`）。
-
+- **OpenAI-compatible 服务**（openrouter.ai 真实端点、LM Studio、Ollama、vLLM 等）
 
 ## 更新计划
 
-- 支持上游openai/兼容openai
 - 支持自动写入trae配置，实现一键安装
 
 ## 它解决什么问题
 
 Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
 
-- **协议转换**：Trae 发送 OpenAI Chat Completions 格式，大多数中转服务只接受 Anthropic Messages 格式
+- **协议转换**：Trae 发送 OpenAI Chat Completions 格式，部分中转服务只接受 Anthropic Messages 格式
 - **模型名映射**：Trae 发送 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
 - **TLS 证书**：HTTPS 请求需要受信任的证书，但目标域名指向 localhost
 
-trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换，让这一切对 Trae 完全透明。
+trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换（或直接透传），让这一切对 Trae 完全透明。
 
 ## 工作原理
 
@@ -34,11 +31,13 @@ Trae  (API → https://openrouter.ai/api)
 trae-proxy :443  (内置 TLS，自签证书)
       │
       ├─ GET  /v1/models           → 返回配置中的模型列表（无上游调用）
-      ├─ POST /v1/chat/completions → 转换为 Anthropic Messages → 上游 → 转换回
+      ├─ POST /v1/chat/completions
+      │     ├─ upstream_protocol = "anthropic" → 转换为 Anthropic Messages → 上游 → 转换回
+      │     └─ upstream_protocol = "openai"    → 模型名映射 → 直接透传
       └─ POST /v1/messages + 其他  → 去掉 /api 前缀 + 模型名映射 → 透传
       │
       ↓
-上游 Anthropic Messages API（任意兼容实现）
+上游（Anthropic Messages API 或 OpenAI Chat Completions API）
 ```
 
 **核心流程：**
@@ -168,6 +167,23 @@ sudo trae-proxy stop
 
 会同时停止守护进程并移除 `/etc/hosts` 条目。
 
+### 更新
+
+```bash
+# 更新到最新版本
+trae-proxy update
+
+# 更新到指定版本
+trae-proxy update --version v0.2.0
+
+# 强制重新安装（版本相同时也执行）
+trae-proxy update --force
+```
+
+trae-proxy 会从 GitHub Releases 下载对应平台的二进制，校验 SHA256 后原子替换当前可执行文件。
+
+> Windows 暂不支持自更新，请手动从 Releases 页面下载。
+
 ### 查看状态
 
 ```bash
@@ -183,6 +199,7 @@ trae-proxy status
 [daemon] ✓ running (pid 12345)
 
 Upstream: http://192.168.48.12:8080
+Protocol: anthropic
 Listen:   :443
 Hijack:   openrouter.ai
 Models:   8 mappings
@@ -203,12 +220,16 @@ sudo trae-proxy uninstall --purge
 配置文件路径：`~/.config/trae-proxy/config.toml`
 
 ```toml
-# 上游 Anthropic Messages API 地址
-# 支持任意兼容 Anthropic Messages API 的端点，例如：
+# 上游 API 地址
+# 支持任意兼容 Anthropic Messages API 或 OpenAI Chat Completions 的端点，例如：
 #   中转站：  http://your-relay-server:8080
 #   讯飞星火：https://spark-api-open.xf-yun.com
 #   京东云：  https://your-jdcloud-endpoint
 upstream = "http://192.168.48.12:8080"
+
+# 上游协议: "anthropic" (默认) 将 OpenAI Chat Completions 转换为 Anthropic Messages 格式;
+# "openai" 直接透传 — 适用于 openrouter.ai、LM Studio、Ollama 等 OpenAI-compatible 上游
+upstream_protocol = "anthropic"
 
 # HTTPS 监听地址
 listen = ":443"
@@ -251,6 +272,10 @@ CLI flags > 环境变量 > config.toml > 内置默认值
 
 ### POST /v1/chat/completions
 
+路由行为取决于 `upstream_protocol` 配置：
+
+#### `upstream_protocol = "anthropic"`（默认）
+
 **完整的 Chat Completions ↔ Anthropic Messages 双向转换。**
 
 请求方向（Chat → Anthropic）：
@@ -268,6 +293,10 @@ CLI flags > 环境变量 > config.toml > 内置默认值
 
 - **非流式**：一次性转换 content blocks、tool_use → tool_calls、usage、stop_reason
 - **流式 SSE**：状态机逐事件转换，支持 text streaming 和 tool_use 参数流式传输
+
+#### `upstream_protocol = "openai"`
+
+**直接透传** — 不做协议转换，仅做模型名映射后将请求原样转发到上游 `POST /v1/chat/completions`。适用于 openrouter.ai、LM Studio、Ollama 等原生 OpenAI-compatible 上游。
 
 ### 其他路径（透传）
 
@@ -293,6 +322,7 @@ trae-proxy/
 │   │   └── util.go                  # UUID 生成
 │   ├── tls/ca.go                    # CA 生成、证书签发、系统信任
 │   ├── hosts/hosts.go               # /etc/hosts 管理（跨平台）
+│   ├── updater/updater.go           # 自更新：GitHub Release 下载 + SHA256 校验
 │   └── daemon/                      # 守护进程模式（Unix/Windows）
 │       ├── daemon.go                # 共享逻辑
 │       ├── daemon_unix.go           # Unix: Setsid + SIGTERM
@@ -389,7 +419,7 @@ anthropic-version, anthropic-beta, Accept
 
 - 代理运行期间，`openrouter.ai`（或配置的 hijack 域名）在本机解析到 localhost，**真实的 OpenRouter 服务不可访问**
 - 监听 443 端口和修改 `/etc/hosts` 需要管理员权限
-- 上游必须兼容 Anthropic Messages API（`POST /v1/messages`）
+- `upstream_protocol = "anthropic"` 模式要求上游兼容 Anthropic Messages API（`POST /v1/messages`）；`upstream_protocol = "openai"` 模式要求上游兼容 OpenAI Chat Completions API（`POST /v1/chat/completions`）
 - 自签 CA 仅影响本机，不会影响其他设备
 
 ## 许可证

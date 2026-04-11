@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,7 @@ import (
 	"github.com/zhangyc/trae-proxy/internal/hosts"
 	"github.com/zhangyc/trae-proxy/internal/proxy"
 	tlsutil "github.com/zhangyc/trae-proxy/internal/tls"
+	"github.com/zhangyc/trae-proxy/internal/updater"
 )
 
 var version = "dev"
@@ -30,6 +32,7 @@ func main() {
 	rootCmd.AddCommand(stopCmd())
 	rootCmd.AddCommand(statusCmd())
 	rootCmd.AddCommand(uninstallCmd())
+	rootCmd.AddCommand(updateCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -41,6 +44,19 @@ func initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Generate CA, install trust, create default config",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Clean up any stale /etc/hosts entries left by a previously crashed/killed
+			// start process (signal handler only fires on SIGINT/SIGTERM, not SIGKILL).
+			if _, running := daemon.IsRunning(); !running {
+				if data, err := os.ReadFile(hosts.HostsPath()); err == nil {
+					if strings.Contains(string(data), "# trae-proxy") {
+						fmt.Println("[init] detected stale hosts entry from prior run, cleaning up...")
+						if err := hosts.Remove(); err != nil {
+							fmt.Printf("[init] WARNING: could not clean stale hosts entries: %v\n", err)
+						}
+					}
+				}
+			}
+
 			dir, err := config.ConfigDir()
 			if err != nil {
 				return err
@@ -142,6 +158,7 @@ func startCmd() *cobra.Command {
 			if err := hosts.Add(cfg.Hijack); err != nil {
 				return fmt.Errorf("add hosts: %w", err)
 			}
+			defer hosts.Remove() // ensure cleanup on any exit (panic, fatal, etc.)
 
 			tlsCfg, err := tlsutil.LoadServerTLSConfig(caDir)
 			if err != nil {
@@ -227,6 +244,7 @@ func statusCmd() *cobra.Command {
 
 			fmt.Println()
 			fmt.Printf("Upstream: %s\n", cfg.Upstream)
+			fmt.Printf("Protocol: %s\n", cfg.UpstreamProtocol)
 			fmt.Printf("Listen:   %s\n", cfg.Listen)
 			fmt.Printf("Hijack:   %s\n", cfg.Hijack)
 			fmt.Printf("Models:   %d mappings\n", len(cfg.Models))
@@ -268,12 +286,96 @@ func uninstallCmd() *cobra.Command {
 	return cmd
 }
 
+func updateCmd() *cobra.Command {
+	var (
+		targetVersion string
+		force         bool
+	)
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Update trae-proxy to the latest release (macOS/Linux only)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			assetName, err := updater.AssetName()
+			if err != nil {
+				return err
+			}
+
+			u := updater.New()
+
+			tag := targetVersion
+			if tag == "" {
+				fmt.Println("[update] fetching latest release...")
+				tag, err = u.LatestTag()
+				if err != nil {
+					return err
+				}
+			}
+
+			if !force && tag == version {
+				fmt.Printf("[update] already up to date (%s)\n", version)
+				return nil
+			}
+
+			exePath, err := os.Executable()
+			if err != nil {
+				return fmt.Errorf("find executable: %w", err)
+			}
+			exePath, err = filepath.EvalSymlinks(exePath)
+			if err != nil {
+				return fmt.Errorf("resolve symlinks: %w", err)
+			}
+
+			fmt.Printf("[update] fetching checksum for %s %s...\n", assetName, tag)
+			expectedSHA, err := u.FetchChecksum(tag, assetName)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("[update] downloading %s...\n", assetName)
+			tmpPath, err := u.Download(tag, assetName, exePath)
+			if err != nil {
+				return err
+			}
+			defer os.Remove(tmpPath) // cleanup on verify/replace failure
+
+			fmt.Println("[update] verifying checksum...")
+			if err := updater.Verify(tmpPath, expectedSHA); err != nil {
+				return err
+			}
+
+			fmt.Printf("[update] installing to %s...\n", exePath)
+			if err := updater.Replace(exePath, tmpPath); err != nil {
+				return err
+			}
+
+			fmt.Printf("[update] updated from %s to %s\n", version, tag)
+			if pid, running := daemon.IsRunning(); running {
+				fmt.Printf("[update] daemon is running (pid %d) — restart it to use the new version\n", pid)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&targetVersion, "version", "", "Target version (default: latest)")
+	cmd.Flags().BoolVar(&force, "force", false, "Re-install even if version matches")
+	return cmd
+}
+
 func writeDefaultConfig(path string, cfg *config.Config) error {
 	content := fmt.Sprintf(`# trae-proxy configuration
 
 upstream = "%s"
+
+# Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
+# conversion. "openai" directly forwards OpenAI Chat Completions — use this when
+# upstream is OpenAI-compatible (openrouter.ai, LM Studio, Ollama, most relays).
+upstream_protocol = "anthropic"
+
 listen = "%s"
 hijack = "%s"
+
+# When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
+# instead of returning the fake list from [models] below.
+# real_models = false
 
 [models]
 "anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
