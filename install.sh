@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_OWNER="DASungta"
-REPO_NAME="tare-proxy"
+REPO_NAME="trae-proxy"
 BINARY_NAME="trae-proxy"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 
