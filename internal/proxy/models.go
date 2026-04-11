@@ -27,7 +27,7 @@ func HandleModels(s *Server) http.HandlerFunc {
 // Returns true on success.
 func forwardToRealModels(s *Server, w http.ResponseWriter, r *http.Request) bool {
 	url := fmt.Sprintf("https://%s/api/v1/models", s.Config.Hijack)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(r.Context(), "GET", url, nil)
 	if err != nil {
 		fmt.Printf("[models] build request error: %v\n", err)
 		return false

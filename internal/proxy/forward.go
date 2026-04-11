@@ -57,7 +57,7 @@ func HandleForward(cfg *config.Config, client *http.Client) http.HandlerFunc {
 		}
 
 		url := cfg.Upstream + upstreamPath
-		req, err := http.NewRequest(r.Method, url, strings.NewReader(string(body)))
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, url, strings.NewReader(string(body)))
 		if err != nil {
 			sendProxyError(w, http.StatusBadGateway, fmt.Sprintf("failed to create request: %v", err))
 			return
@@ -88,14 +88,16 @@ func HandleForward(cfg *config.Config, client *http.Client) http.HandlerFunc {
 		buf := make([]byte, 4096)
 		flusher, canFlush := w.(http.Flusher)
 		for {
-			n, err := resp.Body.Read(buf)
+			n, readErr := resp.Body.Read(buf)
 			if n > 0 {
-				w.Write(buf[:n])
+				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
+					break // 客户端已断开
+				}
 				if canFlush {
 					flusher.Flush()
 				}
 			}
-			if err != nil {
+			if readErr != nil {
 				break
 			}
 		}

@@ -30,23 +30,45 @@ func NewServer(cfg *config.Config) *Server {
 		},
 	}
 	bypassDialer := &net.Dialer{
-		Resolver: resolver,
-		Timeout:  10 * time.Second,
+		Resolver:  resolver,
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
 	}
 	bypassClient := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 30 * time.Second, // BypassClient 只用于 /v1/models，不涉及流式，保留整体超时
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return bypassDialer.DialContext(ctx, network, addr)
 			},
-			TLSHandshakeTimeout: 10 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
 		},
+	}
+
+	// HTTPClient 用于所有上游代理请求（包括 SSE 流式响应）。
+	// 不设 http.Client.Timeout — 该字段覆盖整个请求生命周期含响应体读取，
+	// 会强制切断仍在传输的 SSE 流。改用 Transport 分阶段超时：
+	//   - DialContext/TLSHandshakeTimeout 覆盖连接建立阶段
+	//   - ResponseHeaderTimeout 防止上游不响应 header（挂起连接）
+	//   - IdleConnTimeout 回收空闲连接
+	// 客户端断开由 context 传播 + 写错误检测共同兜底。
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
 	}
 
 	return &Server{
 		Config: cfg,
 		HTTPClient: &http.Client{
-			Timeout: 600 * time.Second,
+			Transport: &http.Transport{
+				DialContext:           dialer.DialContext,
+				TLSHandshakeTimeout:   10 * time.Second,
+				ResponseHeaderTimeout: 60 * time.Second,
+				IdleConnTimeout:       90 * time.Second,
+				MaxIdleConns:          20,
+				MaxIdleConnsPerHost:   20, // 所有流量到同一上游 host，默认值 2 会导致频繁建连
+			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -82,6 +104,13 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	srv := &http.Server{
 		Addr:    s.Config.Listen,
 		Handler: s.Handler(),
+		// ReadHeaderTimeout 防止 slowloris 攻击（慢速发送请求头）
+		ReadHeaderTimeout: 10 * time.Second,
+		// ReadTimeout 覆盖读取完整请求（header + body）的最大时长
+		ReadTimeout: 60 * time.Second,
+		// IdleTimeout 限制 keep-alive 空闲连接的保留时长
+		IdleTimeout: 120 * time.Second,
+		// WriteTimeout 不设：SSE 流式响应需要长期写入，由写错误检测 + context 取消兜底
 	}
 
 	if s.TLSConfig != nil {
@@ -95,7 +124,10 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		srv.Shutdown(context.Background())
+		// 30s 内等待在途请求完成；超时后强制关闭，避免 SSE 流导致进程永远挂起
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer shutdownCancel()
+		srv.Shutdown(shutdownCtx)
 	}()
 
 	fmt.Printf("[trae-proxy] listening on %s → %s (upstream: %s)\n", s.Config.Listen, s.Config.Upstream, s.Config.UpstreamProtocol)

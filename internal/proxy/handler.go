@@ -36,7 +36,7 @@ func HandleChatCompletions(cfg *config.Config, client *http.Client) http.Handler
 		upstreamBody, _ := json.Marshal(anthropicReq)
 
 		url := cfg.Upstream + "/v1/messages"
-		req, err := http.NewRequest("POST", url, strings.NewReader(string(upstreamBody)))
+		req, err := http.NewRequestWithContext(r.Context(), "POST", url, strings.NewReader(string(upstreamBody)))
 		if err != nil {
 			sendProxyError(w, http.StatusBadGateway, fmt.Sprintf("failed to create request: %v", err))
 			return
@@ -84,17 +84,25 @@ func HandleChatCompletions(cfg *config.Config, client *http.Client) http.Handler
 			scanner.Buffer(make([]byte, 64*1024), 64*1024)
 
 			var dataBuffer strings.Builder
-			for scanner.Scan() {
+			var writeErr error
+			writeAndFlush := func(data []byte) {
+				if writeErr != nil {
+					return
+				}
+				_, writeErr = w.Write(data)
+				if writeErr == nil && canFlush {
+					flusher.Flush()
+				}
+			}
+
+			for scanner.Scan() && writeErr == nil {
 				line := scanner.Text()
 
 				if strings.HasPrefix(line, "data:") {
 					if dataBuffer.Len() > 0 {
 						out := conv.Feed(dataBuffer.String())
 						if out != "" {
-							w.Write([]byte(out))
-							if canFlush {
-								flusher.Flush()
-							}
+							writeAndFlush([]byte(out))
 						}
 						dataBuffer.Reset()
 					}
@@ -104,21 +112,15 @@ func HandleChatCompletions(cfg *config.Config, client *http.Client) http.Handler
 				} else if dataBuffer.Len() > 0 && strings.TrimSpace(line) == "" {
 					out := conv.Feed(dataBuffer.String())
 					if out != "" {
-						w.Write([]byte(out))
-						if canFlush {
-							flusher.Flush()
-						}
+						writeAndFlush([]byte(out))
 					}
 					dataBuffer.Reset()
 				}
 			}
-			if dataBuffer.Len() > 0 {
+			if dataBuffer.Len() > 0 && writeErr == nil {
 				out := conv.Feed(dataBuffer.String())
 				if out != "" {
-					w.Write([]byte(out))
-					if canFlush {
-						flusher.Flush()
-					}
+					writeAndFlush([]byte(out))
 				}
 			}
 		} else {
