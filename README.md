@@ -40,20 +40,46 @@ trae-proxy :443  (内置 TLS，自签证书)
 
 ### 安装
 
-**一键安装**（推荐，macOS / Linux）：
+#### macOS / Linux（一键安装）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/master/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/main/install.sh | sudo bash
 ```
 
 安装脚本自动检测系统和架构，下载对应的预编译二进制到 `/usr/local/bin`。
 
 指定版本：`VERSION=v0.1.0 curl -fsSL ... | sudo bash`
 
+**macOS 注意事项：**
+- 支持 Apple Silicon (M1/M2/M3/M4) 和 Intel，安装脚本自动检测
+- `init` 时 CA 证书通过 `security add-trusted-cert` 安装到系统钥匙串，首次执行可能弹出密码确认框
+- 如果浏览器仍提示证书不信任，重启浏览器或重新执行 `sudo trae-proxy init`
+
+**Linux 注意事项：**
+- 目前支持 x86_64 (amd64) 架构
+- `init` 时 CA 证书复制到 `/usr/local/share/ca-certificates/` 并执行 `update-ca-certificates`
+- RHEL/CentOS 无 `update-ca-certificates`：手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到 `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`
+- 某些发行版 DNS 缓存（systemd-resolved）需手动刷新：`sudo systemd-resolve --flush-caches`
+- snap 版浏览器（如 Ubuntu 的 Firefox）有独立证书存储，可能不信任系统 CA，建议改用 apt 安装的浏览器
+
+#### Windows（手动安装）
+
+1. 从 [Releases](https://github.com/DASungta/tare-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
+2. 重命名为 `trae-proxy.exe`，放到任意目录（如 `C:\tools\`）
+3. 将该目录添加到系统 `PATH` 环境变量
+
+所有命令需在**管理员身份的 PowerShell** 中运行（右键 → 以管理员身份运行）。
+
+**Windows 注意事项：**
+- `init` 时 CA 证书通过 `certutil -addstore -f "ROOT"` 安装，系统会弹出安全警告，选"是"确认
+- hosts 文件路径：`C:\Windows\System32\drivers\etc\hosts`
+- Windows Defender 首次运行时可能弹出防火墙提示，需允许 trae-proxy 监听网络
+- `stop` 命令通过 `TerminateProcess` 停止守护进程
+
 <details>
 <summary>其他安装方式</summary>
 
-**手动下载**
+**手动下载预编译二进制**
 
 从 [Releases](https://github.com/DASungta/tare-proxy/releases/latest) 页面下载对应平台的文件：
 
@@ -64,14 +90,12 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/master/install.
 | Linux x86_64 | `trae-proxy-linux-amd64` |
 | Windows x86_64 | `trae-proxy-windows-amd64.exe` |
 
-下载后：
-
 ```bash
 chmod +x trae-proxy-darwin-arm64
 sudo mv trae-proxy-darwin-arm64 /usr/local/bin/trae-proxy
 ```
 
-**从源码编译**（需要 Go 1.21+，适合二次开发）：
+**从源码编译**（需要 Go 1.21+）：
 
 ```bash
 git clone https://github.com/DASungta/tare-proxy.git
@@ -151,108 +175,6 @@ sudo trae-proxy uninstall
 # 同时删除配置目录
 sudo trae-proxy uninstall --purge
 ```
-
-## 各操作系统安装指南
-
-### macOS
-
-支持 Apple Silicon (M1/M2/M3/M4) 和 Intel 两种架构，安装脚本自动检测。
-
-**安装：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/master/install.sh | sudo bash
-```
-
-**初始化：**
-
-```bash
-sudo trae-proxy init
-```
-
-CA 证书会通过 `security add-trusted-cert` 安装到系统钥匙串（System Keychain）。首次执行时系统可能弹出密码确认框。
-
-**启动：**
-
-```bash
-sudo trae-proxy start -d
-```
-
-macOS 会自动刷新 DNS 缓存（`dscacheutil -flushcache` + `killall -HUP mDNSResponder`），无需手动操作。
-
-**注意事项：**
-- 监听 443 端口和修改 `/etc/hosts` 需要 `sudo`
-- 如果浏览器仍提示证书不信任，尝试重启浏览器或执行 `sudo trae-proxy init` 重新安装 CA
-
----
-
-### Linux
-
-目前支持 x86_64 (amd64) 架构。
-
-**安装：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/master/install.sh | sudo bash
-```
-
-**初始化：**
-
-```bash
-sudo trae-proxy init
-```
-
-CA 证书会复制到 `/usr/local/share/ca-certificates/` 并执行 `update-ca-certificates`。
-
-> 如果系统没有 `update-ca-certificates` 命令（如 RHEL/CentOS），需要手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到 `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`。
-
-**启动：**
-
-```bash
-sudo trae-proxy start -d
-```
-
-**注意事项：**
-- 某些发行版的 DNS 缓存（如 systemd-resolved）可能需要手动刷新：`sudo systemd-resolve --flush-caches`
-- 如果使用 snap 版本的浏览器（如 Ubuntu 的 Firefox），它有独立的证书存储，可能不信任系统 CA。建议使用 apt 安装的浏览器
-
----
-
-### Windows
-
-Windows 不支持一键安装脚本，需要手动安装。
-
-**安装：**
-
-1. 从 [Releases](https://github.com/DASungta/tare-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
-2. 重命名为 `trae-proxy.exe`，放到你喜欢的目录（如 `C:\tools\`）
-3. 将该目录添加到系统 `PATH` 环境变量
-
-**初始化（以管理员身份运行 PowerShell）：**
-
-```powershell
-trae-proxy init
-```
-
-CA 证书通过 `certutil -addstore -f "ROOT"` 安装到 Windows 证书存储。系统会弹出安全警告，选择"是"确认安装。
-
-**启动（以管理员身份运行 PowerShell）：**
-
-```powershell
-trae-proxy start -d
-```
-
-**停止：**
-
-```powershell
-trae-proxy stop
-```
-
-**注意事项：**
-- 所有命令都需要**管理员权限**（右键 PowerShell → 以管理员身份运行）
-- hosts 文件路径为 `C:\Windows\System32\drivers\etc\hosts`
-- Windows Defender 可能在首次运行时弹出防火墙提示，需允许 trae-proxy 监听网络
-- 守护进程模式通过 `TerminateProcess` 停止，而非 Unix 的 SIGTERM
 
 ## 配置
 
