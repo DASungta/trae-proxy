@@ -43,7 +43,7 @@ trae-proxy :443  (内置 TLS，自签证书)
 #### macOS / Linux（一键安装）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh | sudo bash
 ```
 
 安装脚本自动检测系统和架构，下载对应的预编译二进制到 `/usr/local/bin`。
@@ -64,7 +64,7 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/main/install.sh
 
 #### Windows（手动安装）
 
-1. 从 [Releases](https://github.com/DASungta/tare-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
+1. 从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
 2. 重命名为 `trae-proxy.exe`，放到任意目录（如 `C:\tools\`）
 3. 将该目录添加到系统 `PATH` 环境变量
 
@@ -81,7 +81,7 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/tare-proxy/main/install.sh
 
 **手动下载预编译二进制**
 
-从 [Releases](https://github.com/DASungta/tare-proxy/releases/latest) 页面下载对应平台的文件：
+从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载对应平台的文件：
 
 | 平台 | 文件名 |
 |------|--------|
@@ -98,7 +98,7 @@ sudo mv trae-proxy-darwin-arm64 /usr/local/bin/trae-proxy
 **从源码编译**（需要 Go 1.21+）：
 
 ```bash
-git clone https://github.com/DASungta/tare-proxy.git
+git clone https://github.com/DASungta/trae-proxy.git
 cd trae-proxy
 make install    # 编译并安装到 /usr/local/bin
 ```
