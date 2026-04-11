@@ -9,6 +9,12 @@
 
 > 上游必须兼容 Anthropic Messages API（`POST /v1/messages`）。
 
+
+## 更新计划
+
+- 支持上游openai/兼容openai
+- 支持自动写入trae配置，实现一键安装
+
 ## 它解决什么问题
 
 Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
