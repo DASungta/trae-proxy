@@ -49,7 +49,13 @@ fetch_latest_version() {
 
 check_permissions() {
     if [ ! -d "$INSTALL_DIR" ]; then
-        fatal "安装目录不存在: $INSTALL_DIR"
+        echo "安装目录 ${INSTALL_DIR} 不存在，正在创建..."
+        if ! mkdir -p "$INSTALL_DIR" 2>/dev/null; then
+            if [ "$(id -u)" -ne 0 ]; then
+                fatal "无法创建 ${INSTALL_DIR}，请用 sudo 运行:\n  curl -fsSL <url> | sudo bash"
+            fi
+            fatal "无法创建安装目录: ${INSTALL_DIR}"
+        fi
     fi
     if [ ! -w "$INSTALL_DIR" ]; then
         if [ "$(id -u)" -ne 0 ]; then
