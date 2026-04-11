@@ -231,21 +231,27 @@ sudo trae-proxy uninstall --purge
 #   中转站：  http://your-relay-server:8080
 #   讯飞星火：https://spark-api-open.xf-yun.com
 #   京东云：  https://your-jdcloud-endpoint
-upstream = "http://192.168.48.12:8080"
+#   OpenRouter 真实端点、LM Studio、Ollama、vLLM 等
+upstream = "http://your-server:8080"
 
-# 上游协议: "anthropic" (默认) 将 OpenAI Chat Completions 转换为 Anthropic Messages 格式;
-# "openai" 直接透传 — 适用于 openrouter.ai、LM Studio、Ollama 等 OpenAI-compatible 上游
+# 上游协议（可选，默认 "anthropic"）
+# "anthropic" — 将 Trae 发出的 OpenAI Chat Completions 请求转换为 Anthropic Messages 格式后转发，
+#               适用于各类 Claude 中转站、讯飞星火、京东云等兼容 Anthropic API 的服务
+# "openai"    — 直接透传，不做协议转换，仅映射模型名，
+#               适用于 openrouter.ai 真实端点、LM Studio、Ollama、vLLM 等 OpenAI-compatible 服务
 upstream_protocol = "anthropic"
 
-# HTTPS 监听地址
+# HTTPS 监听地址（默认 :443，需要管理员权限）
 listen = ":443"
 
 # 劫持的域名（写入 /etc/hosts），默认 openrouter.ai
-# Trae 默认将 API 请求发往 openrouter.ai，无需修改
+# Trae 默认将 API 请求发往 openrouter.ai，通常无需修改
 # 如果你想劫持其他域名，在此修改，并同步更新 Trae 的 API 地址配置
 hijack = "openrouter.ai"
 
-# 模型名映射：请求中的名称 → 上游名称
+# 模型名映射：Trae 发送的模型名 → 上游实际接受的模型名
+# 三级回退：① 精确匹配 → ② 去掉 anthropic/ 前缀 → ③ 原样透传
+# 因此新模型通常无需手动添加映射
 [models]
 "anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
 "anthropic/claude-sonnet-4-6" = "claude-sonnet-4-6"
@@ -257,56 +263,6 @@ hijack = "openrouter.ai"
 ### 配置优先级
 
 CLI flags > 环境变量 > config.toml > 内置默认值
-
-### 模型名映射规则
-
-三级回退机制：
-
-1. **精确匹配**：在 `[models]` 表中查找完全匹配
-2. **去前缀**：去掉 `anthropic/` 前缀后直接使用（如 `anthropic/claude-new` → `claude-new`）
-3. **原样透传**：以上都不匹配则保持原名
-
-这意味着新增模型通常无需修改配置。
-
-## 请求路由
-
-所有请求先去掉 `/api` 路径前缀（Anthropic SDK 会自动追加），然后按以下规则路由：
-
-### GET /v1/models
-
-返回配置文件 `[models]` 中所有 key 组成的模型列表，格式兼容 OpenRouter。不会调用上游。用于 Trae 验证模型 ID。
-
-### POST /v1/chat/completions
-
-路由行为取决于 `upstream_protocol` 配置：
-
-#### `upstream_protocol = "anthropic"`（默认）
-
-**完整的 Chat Completions ↔ Anthropic Messages 双向转换。**
-
-请求方向（Chat → Anthropic）：
-
-| Chat Completions | Anthropic Messages |
-|---|---|
-| `messages[role=system]` | 提取为顶层 `system` 字段 |
-| `messages[role=tool]` | 合并连续条目为 `user` + `tool_result` 块 |
-| `messages[role=assistant].tool_calls` | 转换为 `tool_use` 内容块 |
-| `content: [{type: "image_url", ...}]` | 转换为 `image` source 块（base64 或 URL） |
-| `tools` (OpenAI function 格式) | 转换为 Anthropic tool 格式 |
-| `tool_choice: "required"` | `{type: "any"}` |
-
-响应方向（Anthropic → Chat）：
-
-- **非流式**：一次性转换 content blocks、tool_use → tool_calls、usage、stop_reason
-- **流式 SSE**：状态机逐事件转换，支持 text streaming 和 tool_use 参数流式传输
-
-#### `upstream_protocol = "openai"`
-
-**直接透传** — 不做协议转换，仅做模型名映射后将请求原样转发到上游 `POST /v1/chat/completions`。适用于 openrouter.ai、LM Studio、Ollama 等原生 OpenAI-compatible 上游。
-
-### 其他路径（透传）
-
-去掉 `/api` 前缀 → 映射 JSON body 中的 model 字段 → 转发所有标准头 → 4KB chunk 流式回传。
 
 ## 技术细节
 
