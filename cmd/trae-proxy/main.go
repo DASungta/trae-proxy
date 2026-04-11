@@ -20,6 +20,33 @@ import (
 
 var version = "dev"
 
+var (
+	daemonIsRunning = daemon.IsRunning
+	daemonStop      = daemon.StopDaemon
+	daemonStart     = daemon.DaemonizeArgs
+	removeHosts     = hosts.Remove
+)
+
+type startOptions struct {
+	daemonMode bool
+	upstream   string
+	configPath string
+	listen     string
+}
+
+type colorLevel string
+
+const (
+	colorReset  = "\033[0m"
+	colorGreen  = "\033[32m"
+	colorYellow = "\033[33m"
+	colorRed    = "\033[31m"
+
+	levelOK    colorLevel = "ok"
+	levelWarn  colorLevel = "warn"
+	levelError colorLevel = "error"
+)
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:     "trae-proxy",
@@ -30,6 +57,7 @@ func main() {
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(startCmd())
 	rootCmd.AddCommand(stopCmd())
+	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(statusCmd())
 	rootCmd.AddCommand(uninstallCmd())
 	rootCmd.AddCommand(updateCmd())
@@ -116,78 +144,21 @@ func initCmd() *cobra.Command {
 }
 
 func startCmd() *cobra.Command {
-	var (
-		daemonMode bool
-		upstream   string
-		configPath string
-		listen     string
-	)
+	var opts startOptions
 
 	cmd := &cobra.Command{
 		Use:   "start",
 		Short: "Start the proxy (adds hosts entry, starts HTTPS server)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if daemonMode {
-				return daemon.Daemonize()
+			if opts.daemonMode {
+				return daemonStart(opts.daemonArgs())
 			}
 
-			dir, _ := config.ConfigDir()
-			caDir := filepath.Join(dir, "ca")
-			if _, err := os.Stat(filepath.Join(caDir, "root-ca.pem")); os.IsNotExist(err) {
-				return fmt.Errorf("not initialized. Run 'trae-proxy init' first")
-			}
-
-			if configPath == "" {
-				configPath = filepath.Join(dir, "config.toml")
-			}
-
-			overrides := map[string]string{}
-			if upstream != "" {
-				overrides["upstream"] = upstream
-			}
-			if listen != "" {
-				overrides["listen"] = listen
-			}
-
-			cfg, err := config.Load(configPath, overrides)
-			if err != nil {
-				return fmt.Errorf("load config: %w", err)
-			}
-
-			fmt.Printf("[start] adding hosts entry for %s...\n", cfg.Hijack)
-			if err := hosts.Add(cfg.Hijack); err != nil {
-				return fmt.Errorf("add hosts: %w", err)
-			}
-			defer hosts.Remove() // ensure cleanup on any exit (panic, fatal, etc.)
-
-			tlsCfg, err := tlsutil.LoadServerTLSConfig(caDir)
-			if err != nil {
-				return fmt.Errorf("load TLS config: %w", err)
-			}
-
-			srv := proxy.NewServer(cfg)
-			srv.TLSConfig = tlsCfg
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
-			sigCh := make(chan os.Signal, 1)
-			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-			go func() {
-				<-sigCh
-				fmt.Println("\n[trae-proxy] shutting down...")
-				hosts.Remove()
-				cancel()
-			}()
-
-			return srv.ListenAndServe(ctx)
+			return runProxy(opts)
 		},
 	}
 
-	cmd.Flags().BoolVarP(&daemonMode, "daemon", "d", false, "Run as background daemon")
-	cmd.Flags().StringVar(&upstream, "upstream", "", "Override upstream URL")
-	cmd.Flags().StringVar(&configPath, "config", "", "Config file path")
-	cmd.Flags().StringVar(&listen, "listen", "", "Override listen address")
+	bindStartFlags(cmd, &opts, true)
 
 	return cmd
 }
@@ -197,9 +168,9 @@ func stopCmd() *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the daemon and remove hosts entry",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if pid, running := daemon.IsRunning(); running {
+			if pid, running := daemonIsRunning(); running {
 				fmt.Printf("[stop] stopping daemon (pid %d)...\n", pid)
-				if err := daemon.StopDaemon(); err != nil {
+				if err := daemonStop(); err != nil {
 					return err
 				}
 				fmt.Println("[stop] daemon stopped")
@@ -208,11 +179,30 @@ func stopCmd() *cobra.Command {
 			}
 
 			fmt.Println("[stop] removing hosts entry...")
-			hosts.Remove()
+			removeHosts()
 			fmt.Println("[stop] done")
 			return nil
 		},
 	}
+}
+
+func restartCmd() *cobra.Command {
+	var opts startOptions
+
+	cmd := &cobra.Command{
+		Use:   "restart",
+		Short: "Restart the daemon and reload config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := restartDaemon(opts); err != nil {
+				return err
+			}
+			fmt.Println("[restart] done")
+			return nil
+		},
+	}
+
+	bindStartFlags(cmd, &opts, false)
+	return cmd
 }
 
 func statusCmd() *cobra.Command {
@@ -226,20 +216,21 @@ func statusCmd() *cobra.Command {
 			dir, _ := config.ConfigDir()
 			configPath := filepath.Join(dir, "config.toml")
 			cfg, _ := config.Load(configPath, nil)
+			colorize := shouldColorize(os.Stdout)
 
 			has, _ := hosts.HasEntry(cfg.Hijack)
 			if has {
-				fmt.Printf("[hosts] ✓ %s → 127.0.0.1\n", cfg.Hijack)
+				fmt.Println(colorStatusLine(fmt.Sprintf("[hosts] ✓ %s → 127.0.0.1", cfg.Hijack), levelOK, colorize))
 			} else {
-				fmt.Printf("[hosts] ✗ %s not redirected\n", cfg.Hijack)
+				fmt.Println(colorStatusLine(fmt.Sprintf("[hosts] ✗ %s not redirected", cfg.Hijack), levelError, colorize))
 			}
 
-			if pid, running := daemon.IsRunning(); running {
-				fmt.Printf("[daemon] ✓ running (pid %d)\n", pid)
+			if pid, running := daemonIsRunning(); running {
+				fmt.Println(colorStatusLine(fmt.Sprintf("[daemon] ✓ running (pid %d)", pid), levelOK, colorize))
 			} else if pid > 0 {
-				fmt.Printf("[daemon] ✗ dead (stale pid %d)\n", pid)
+				fmt.Println(colorStatusLine(fmt.Sprintf("[daemon] ✗ dead (stale pid %d)", pid), levelWarn, colorize))
 			} else {
-				fmt.Println("[daemon] ✗ not running")
+				fmt.Println(colorStatusLine("[daemon] ✗ not running", levelError, colorize))
 			}
 
 			fmt.Println()
@@ -410,4 +401,154 @@ hijack = "%s"
 "anthropic/claude-opus-4-6" = "claude-opus-4-6"
 `, cfg.Upstream, cfg.Listen, cfg.Hijack)
 	return os.WriteFile(path, []byte(content), 0644)
+}
+
+func bindStartFlags(cmd *cobra.Command, opts *startOptions, includeDaemon bool) {
+	if includeDaemon {
+		cmd.Flags().BoolVarP(&opts.daemonMode, "daemon", "d", false, "Run as background daemon")
+	}
+	cmd.Flags().StringVar(&opts.upstream, "upstream", "", "Override upstream URL")
+	cmd.Flags().StringVar(&opts.configPath, "config", "", "Config file path")
+	cmd.Flags().StringVar(&opts.listen, "listen", "", "Override listen address")
+}
+
+func (o startOptions) daemonArgs() []string {
+	args := []string{"start"}
+	if o.configPath != "" {
+		args = append(args, "--config", o.configPath)
+	}
+	if o.upstream != "" {
+		args = append(args, "--upstream", o.upstream)
+	}
+	if o.listen != "" {
+		args = append(args, "--listen", o.listen)
+	}
+	return args
+}
+
+func (o startOptions) resolvedConfigPath() (string, error) {
+	if o.configPath != "" {
+		return o.configPath, nil
+	}
+	dir, err := config.ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.toml"), nil
+}
+
+func (o startOptions) overrides() map[string]string {
+	overrides := map[string]string{}
+	if o.upstream != "" {
+		overrides["upstream"] = o.upstream
+	}
+	if o.listen != "" {
+		overrides["listen"] = o.listen
+	}
+	return overrides
+}
+
+func runProxy(opts startOptions) error {
+	dir, _ := config.ConfigDir()
+	caDir := filepath.Join(dir, "ca")
+	if _, err := os.Stat(filepath.Join(caDir, "root-ca.pem")); os.IsNotExist(err) {
+		return fmt.Errorf("not initialized. Run 'trae-proxy init' first")
+	}
+
+	configPath, err := opts.resolvedConfigPath()
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.Load(configPath, opts.overrides())
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	fmt.Printf("[start] adding hosts entry for %s...\n", cfg.Hijack)
+	if err := hosts.Add(cfg.Hijack); err != nil {
+		return fmt.Errorf("add hosts: %w", err)
+	}
+	defer hosts.Remove() // ensure cleanup on any exit (panic, fatal, etc.)
+
+	tlsCfg, err := tlsutil.LoadServerTLSConfig(caDir)
+	if err != nil {
+		return fmt.Errorf("load TLS config: %w", err)
+	}
+
+	srv := proxy.NewServer(cfg)
+	srv.TLSConfig = tlsCfg
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		fmt.Println("\n[trae-proxy] shutting down...")
+		hosts.Remove()
+		cancel()
+	}()
+
+	return srv.ListenAndServe(ctx)
+}
+
+func restartDaemon(opts startOptions) error {
+	if pid, running := daemonIsRunning(); running {
+		fmt.Printf("[restart] stopping daemon (pid %d)...\n", pid)
+		if err := daemonStop(); err != nil {
+			return err
+		}
+		fmt.Println("[restart] daemon stopped")
+	} else if pid > 0 {
+		fmt.Printf("[restart] removing stale pid %d...\n", pid)
+		if err := os.Remove(daemon.PIDPath()); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove stale pid: %w", err)
+		}
+	}
+
+	fmt.Println("[restart] removing hosts entry...")
+	removeHosts()
+
+	fmt.Println("[restart] starting daemon...")
+	if err := daemonStart(opts.daemonArgs()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func shouldColorize(out *os.File) bool {
+	info, err := out.Stat()
+	if err != nil {
+		return false
+	}
+	return shouldColorizeFileInfo(info, os.Getenv("TERM"), os.Getenv("NO_COLOR"))
+}
+
+func shouldColorizeFileInfo(info os.FileInfo, term, noColor string) bool {
+	if noColor != "" || term == "dumb" {
+		return false
+	}
+	return (info.Mode() & os.ModeCharDevice) != 0
+}
+
+func colorStatusLine(line string, level colorLevel, enabled bool) string {
+	if !enabled {
+		return line
+	}
+
+	color := ""
+	switch level {
+	case levelOK:
+		color = colorGreen
+	case levelWarn:
+		color = colorYellow
+	case levelError:
+		color = colorRed
+	default:
+		return line
+	}
+
+	return color + line + colorReset
 }

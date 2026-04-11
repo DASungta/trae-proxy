@@ -21,13 +21,16 @@ func LogPath() string {
 }
 
 func Daemonize() error {
+	return DaemonizeArgs(filterDaemonFlag(os.Args[1:]))
+}
+
+func DaemonizeArgs(args []string) error {
 	logFile, err := os.OpenFile(LogPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
 	defer logFile.Close()
 
-	args := filterDaemonFlag(os.Args[1:])
 	cmd := exec.Command(os.Args[0], args...)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

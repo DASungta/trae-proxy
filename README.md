@@ -168,6 +168,9 @@ sudo trae-proxy start -d
 
 # 指定上游地址（覆盖配置文件）
 sudo trae-proxy start --upstream http://your-server:8080
+
+# 重启后台守护进程并重新加载配置文件
+sudo trae-proxy restart
 ```
 
 ### 第五步：在 Trae 中验证
@@ -183,6 +186,18 @@ sudo trae-proxy stop
 ```
 
 会同时停止守护进程并移除 `/etc/hosts` 条目。
+
+### 重启
+
+```bash
+# 按当前配置文件重启后台守护进程
+sudo trae-proxy restart
+
+# 重启时临时覆盖配置
+sudo trae-proxy restart --config ~/.config/trae-proxy/config.toml --upstream http://your-server:8080
+```
+
+`restart` 只作用于后台守护进程；如果守护进程未运行，会直接按 daemon 模式启动。未传覆盖参数时，会重新读取最新的配置文件。
 
 ### 更新
 
@@ -221,6 +236,8 @@ Listen:   :443
 Hijack:   openrouter.ai
 Models:   8 mappings
 ```
+
+在交互式终端中，`status` 会对状态行着色：绿色表示正常，黄色表示 stale pid，红色表示未运行或未重定向。输出被重定向到文件或管道时会自动降级为纯文本。
 
 ### 卸载
 
