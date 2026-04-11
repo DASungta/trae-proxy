@@ -62,16 +62,23 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 
 指定版本：`VERSION=v0.1.0 curl -fsSL ... | sudo bash`
 
-**macOS 注意事项：**
+<details>
+<summary>macOS 注意事项</summary>
+
 - 支持 Apple Silicon (M1/M2/M3/M4) 和 Intel，安装脚本自动检测
 - `init` 时 CA 证书通过 `security add-trusted-cert` 安装到系统钥匙串，首次执行可能弹出密码确认框
 
+</details>
 
-**Linux 注意事项：**
+<details>
+<summary>Linux 注意事项</summary>
+
 - 目前支持 x86_64 (amd64) 架构
 - `init` 时 CA 证书复制到 `/usr/local/share/ca-certificates/` 并执行 `update-ca-certificates`
 - RHEL/CentOS 无 `update-ca-certificates`：手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到 `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`
 - 某些发行版 DNS 缓存（systemd-resolved）需手动刷新：`sudo systemd-resolve --flush-caches`
+
+</details>
 
 #### Windows（手动安装）
 
@@ -81,11 +88,15 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 
 所有命令需在**管理员身份的 PowerShell** 中运行（右键 → 以管理员身份运行）。
 
-**Windows 注意事项：**
+<details>
+<summary>Windows 注意事项</summary>
+
 - `init` 时 CA 证书通过 `certutil -addstore -f "ROOT"` 安装，系统会弹出安全警告，选"是"确认
 - hosts 文件路径：`C:\Windows\System32\drivers\etc\hosts`
 - Windows Defender 首次运行时可能弹出防火墙提示，需允许 trae-proxy 监听网络
 - `stop` 命令通过 `TerminateProcess` 停止守护进程
+
+</details>
 
 <details>
 <summary>其他安装方式</summary>
@@ -142,9 +153,9 @@ upstream = "http://your-server:8080"
 - **关键**：填入你上游服务的 API 密钥
 - 添加模型，Trae 在这一步不会校验。稍等片刻就会在自定义模型列表中出现了。
 
-![添加模型-选择服务商](doc/pics/图片1.png)
+![添加模型-选择服务商](./docs/pics/add-model-select-provider.png)
 
-![添加模型-填写密钥](doc/pics/图片2.png)
+![添加模型-填写密钥](./docs/pics/add-model-enter-api-key.png)
 
 ### 第四步：启动
 
@@ -163,7 +174,7 @@ sudo trae-proxy start --upstream http://your-server:8080
 
 启动后，在 Trae 中选择刚添加的模型，发送一条消息验证是否正常响应。
 
-![Trae 中验证效果](doc/pics/图片3.png)
+![Trae 中验证效果](./docs/pics/trae-validation-result.png)
 
 ### 停止
 
