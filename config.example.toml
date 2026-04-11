@@ -1,0 +1,22 @@
+# trae-proxy configuration
+
+# Upstream Anthropic Messages API address
+upstream = "http://192.168.48.12:8080"
+
+# HTTPS listen address
+listen = ":443"
+
+# Domain to hijack via /etc/hosts
+hijack = "openrouter.ai"
+
+# Model mapping: request model name → upstream model name
+# 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
+[models]
+"anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
+"anthropic/claude-sonnet-4-6" = "claude-sonnet-4-6"
+"anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
+"anthropic/claude-sonnet-4-5" = "claude-sonnet-4-5-20251001"
+"anthropic/claude-haiku-4.5" = "claude-haiku-4-5-20251001"
+"anthropic/claude-haiku-4-5" = "claude-haiku-4-5-20251001"
+"anthropic/claude-opus-4.6" = "claude-opus-4-6"
+"anthropic/claude-opus-4-6" = "claude-opus-4-6"

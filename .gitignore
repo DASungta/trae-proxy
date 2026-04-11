@@ -1,3 +1,9 @@
 .caddy.pid
 .translator.pid
 translator.log
+bin/
+*.exe
+/trae-proxy
+.claude/
+requst.txt
+response.txt
