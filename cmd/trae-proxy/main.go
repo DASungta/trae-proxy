@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -245,7 +246,7 @@ func statusCmd() *cobra.Command {
 }
 
 func uninstallCmd() *cobra.Command {
-	var purge bool
+	var yes bool
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove CA from trust store, clean up hosts",
@@ -286,16 +287,30 @@ func uninstallCmd() *cobra.Command {
 				}
 			}
 
-			if purge {
+			// Ask whether to remove the config directory.
+			removeCfg := yes
+			if !yes {
+				fmt.Printf("[uninstall] remove config directory %s? [y/N] ", dir)
+				scanner := bufio.NewScanner(os.Stdin)
+				if scanner.Scan() {
+					answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
+					removeCfg = answer == "y" || answer == "yes"
+				}
+			}
+			if removeCfg {
 				fmt.Printf("[uninstall] removing config directory %s...\n", dir)
-				os.RemoveAll(dir)
+				if err := os.RemoveAll(dir); err != nil {
+					fmt.Printf("[uninstall] WARNING: could not remove config directory: %v\n", err)
+				}
+			} else {
+				fmt.Printf("[uninstall] keeping config directory %s\n", dir)
 			}
 
 			fmt.Println("[uninstall] done")
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&purge, "purge", false, "Also remove config directory")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Automatically confirm config directory removal")
 	return cmd
 }
 
