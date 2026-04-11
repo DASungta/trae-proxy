@@ -12,6 +12,20 @@
 
 - 支持自动写入trae配置，实现一键安装
 
+## 命令总览
+
+| 命令 | 说明 | 常用标志 |
+|---|---|---|
+| `init` | 生成 CA、安装系统信任、写默认配置文件 | — |
+| `start` | 启动代理（写入 hosts + 监听 443） | `-d` 后台，`--upstream`，`--listen`，`--config`，`-l`/`--log-level`，`--log-body` |
+| `stop` | 停止守护进程并移除 hosts 条目 | — |
+| `restart` | 重启守护进程并重新加载配置（未运行时直接以 daemon 模式启动） | 同 `start`（不含 `-d`） |
+| `status` | 显示 hosts / 守护进程 / 上游 / 模型映射数 | — |
+| `update` | 从 GitHub Releases 自更新（macOS/Linux） | `--version`，`--force` |
+| `uninstall` | 移除 CA 信任、hosts 条目、二进制本体；交互式询问是否删除配置目录 | `-y` / `--yes` 跳过交互 |
+
+所有命令都支持 `--help` 查看完整参数说明。
+
 ## 它解决什么问题
 
 Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
@@ -171,6 +185,16 @@ sudo trae-proxy start --upstream http://your-server:8080
 
 # 重启后台守护进程并重新加载配置文件
 sudo trae-proxy restart
+
+# 开启调试日志（debug 显示请求结构，不含 body）
+sudo trae-proxy start --log-level debug
+
+# 最详细追踪：打印客户端原始请求、代理内部形态、上游请求/响应
+# 默认只打 body 前 512 字节摘要；加 --log-body 才打印完整字节
+sudo trae-proxy start --log-level trace --log-body
+
+# 临时通过环境变量设置（优先级低于 CLI 标志）
+TRAE_LOG_LEVEL=trace sudo -E trae-proxy start
 ```
 
 ### 第五步：在 Trae 中验证
@@ -242,11 +266,12 @@ Models:   8 mappings
 ### 卸载
 
 ```bash
-# 移除 CA 信任和 hosts 条目
+# 交互式卸载：移除 CA 信任、hosts 条目、二进制本体，
+# 并提示是否删除配置目录 ~/.config/trae-proxy/
 sudo trae-proxy uninstall
 
-# 同时删除配置目录
-sudo trae-proxy uninstall --purge
+# 脚本/CI 场景：跳过交互，直接连同配置目录一起删除
+sudo trae-proxy uninstall -y
 ```
 
 ## 配置
@@ -288,9 +313,32 @@ hijack = "openrouter.ai"
 "anthropic/claude-opus-4.6"   = "claude-opus-4-6"
 ```
 
+### 日志
+
+trae-proxy 使用 `log/slog` 分级输出，日志写到 stderr；后台模式下由守护进程重定向到 `~/.config/trae-proxy/trae-proxy.log`。
+
+| Level | 说明 |
+|---|---|
+| `error` | 只记录错误（上游 5xx、解析失败、TLS 握手错等） |
+| `warn` | + 降级行为（模型映射未命中、stale hosts 清理等） |
+| `info`（默认） | + 启动 banner + 每个请求一行摘要（method / path / status / dur_ms / bytes_out） |
+| `debug` | + 请求结构化字段（URL、脱敏后的 headers、model、stream），**不含 body** |
+| `trace` | + 四个 tap 点的原始工件：客户端请求 / 代理内部形态 / 上游请求 / 上游响应 |
+
+`Authorization` 和 `x-api-key` 请求头**在任何级别下都会打码为 `[REDACTED]`**。
+
+`trace` 级别默认只打印 body 的前 512 字节摘要；加 `log_body = true`（或 `--log-body` 标志 / `TRAE_LOG_BODY=1`）才会打印完整字节。流式响应最多累计 1MiB，超出截断并标注 `[truncated at 1MiB]`。
+
+**配置方式**（写入 `~/.config/trae-proxy/config.toml`）：
+
+```toml
+log_level = "info"
+log_body = false
+```
+
 ### 配置优先级
 
-CLI flags > 环境变量 > config.toml > 内置默认值
+CLI flags > 环境变量（`TRAE_LOG_LEVEL`、`TRAE_LOG_BODY`）> config.toml > 内置默认值
 
 ## 技术细节
 
@@ -301,6 +349,7 @@ trae-proxy/
 ├── cmd/trae-proxy/main.go           # CLI 入口（cobra）
 ├── internal/
 │   ├── config/config.go             # TOML 配置、模型映射
+│   ├── logging/logger.go            # 分级日志（slog）+ 敏感 header 脱敏
 │   ├── proxy/
 │   │   ├── server.go                # HTTPS server、路由分发
 │   │   ├── handler.go               # Chat Completions HTTP handler

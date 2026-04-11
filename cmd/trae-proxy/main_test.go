@@ -281,6 +281,30 @@ func TestColorStatusLine(t *testing.T) {
 	}
 }
 
+func TestDaemonArgsIncludesLogLevel(t *testing.T) {
+	opts := startOptions{
+		logLevel: "trace",
+		logBody:  true,
+	}
+	args := opts.daemonArgs()
+
+	foundLevel, foundBody := false, false
+	for i, a := range args {
+		if a == "--log-level" && i+1 < len(args) && args[i+1] == "trace" {
+			foundLevel = true
+		}
+		if a == "--log-body" {
+			foundBody = true
+		}
+	}
+	if !foundLevel {
+		t.Errorf("--log-level trace not found in daemonArgs: %v", args)
+	}
+	if !foundBody {
+		t.Errorf("--log-body not found in daemonArgs: %v", args)
+	}
+}
+
 func filepathDir(path string) string {
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == os.PathSeparator {

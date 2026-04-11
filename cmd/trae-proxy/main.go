@@ -14,6 +14,7 @@ import (
 	"github.com/zhangyc/trae-proxy/internal/config"
 	"github.com/zhangyc/trae-proxy/internal/daemon"
 	"github.com/zhangyc/trae-proxy/internal/hosts"
+	"github.com/zhangyc/trae-proxy/internal/logging"
 	"github.com/zhangyc/trae-proxy/internal/proxy"
 	tlsutil "github.com/zhangyc/trae-proxy/internal/tls"
 	"github.com/zhangyc/trae-proxy/internal/updater"
@@ -33,6 +34,8 @@ type startOptions struct {
 	upstream   string
 	configPath string
 	listen     string
+	logLevel   string
+	logBody    bool
 }
 
 type colorLevel string
@@ -401,6 +404,15 @@ upstream_protocol = "anthropic"
 listen = "%s"
 hijack = "%s"
 
+# Log level: error | warn | info (default) | debug | trace
+# trace adds four tap points per request: client body, proxy internal form,
+# upstream payload, upstream response. Authorization/x-api-key are always redacted.
+log_level = "info"
+
+# When true, the trace level prints full request/response bodies.
+# Leave false unless debugging payloads — bodies may contain API keys / secrets.
+log_body = false
+
 # When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
 # instead of returning the fake list from [models] below.
 # real_models = false
@@ -425,6 +437,8 @@ func bindStartFlags(cmd *cobra.Command, opts *startOptions, includeDaemon bool) 
 	cmd.Flags().StringVar(&opts.upstream, "upstream", "", "Override upstream URL")
 	cmd.Flags().StringVar(&opts.configPath, "config", "", "Config file path")
 	cmd.Flags().StringVar(&opts.listen, "listen", "", "Override listen address")
+	cmd.Flags().StringVarP(&opts.logLevel, "log-level", "l", "", "Log level: trace|debug|info|warn|error")
+	cmd.Flags().BoolVar(&opts.logBody, "log-body", false, "Print full request/response bodies at trace level")
 }
 
 func (o startOptions) daemonArgs() []string {
@@ -437,6 +451,12 @@ func (o startOptions) daemonArgs() []string {
 	}
 	if o.listen != "" {
 		args = append(args, "--listen", o.listen)
+	}
+	if o.logLevel != "" {
+		args = append(args, "--log-level", o.logLevel)
+	}
+	if o.logBody {
+		args = append(args, "--log-body")
 	}
 	return args
 }
@@ -459,6 +479,12 @@ func (o startOptions) overrides() map[string]string {
 	}
 	if o.listen != "" {
 		overrides["listen"] = o.listen
+	}
+	if o.logLevel != "" {
+		overrides["log_level"] = o.logLevel
+	}
+	if o.logBody {
+		overrides["log_body"] = "true"
 	}
 	return overrides
 }
@@ -491,7 +517,13 @@ func runProxy(opts startOptions) error {
 		return fmt.Errorf("load TLS config: %w", err)
 	}
 
-	srv := proxy.NewServer(cfg)
+	logLevel, err := logging.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		return err
+	}
+	logger := logging.New(logLevel, cfg.LogBody, os.Stderr)
+
+	srv := proxy.NewServer(cfg, logger)
 	srv.TLSConfig = tlsCfg
 
 	ctx, cancel := context.WithCancel(context.Background())

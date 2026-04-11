@@ -8,6 +8,15 @@ upstream = "http://192.168.48.12:8080"
 # upstream is OpenAI-compatible (openrouter.ai, LM Studio, Ollama, most relays).
 upstream_protocol = "anthropic"
 
+# Log level: error | warn | info (default) | debug | trace
+# trace adds four tap points per request: client body, proxy internal form,
+# upstream payload, upstream response. Authorization/x-api-key are always redacted.
+log_level = "info"
+
+# When true, the trace level prints full request/response bodies.
+# Leave false unless debugging payloads — bodies may contain API keys / secrets.
+log_body = false
+
 # HTTPS listen address
 listen = ":443"
 

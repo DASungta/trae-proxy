@@ -2,7 +2,6 @@ package proxy
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -16,7 +15,7 @@ func HandleModels(s *Server) http.HandlerFunc {
 				return
 			}
 			// fallback to fake list on error
-			fmt.Println("[models] real models fetch failed, falling back to config list")
+			s.Logger.Warn("real models fetch failed, falling back to config list")
 		}
 		serveFakeModels(s, w)
 	}
@@ -26,10 +25,10 @@ func HandleModels(s *Server) http.HandlerFunc {
 // BypassClient (which resolves DNS via 1.1.1.1, ignoring /etc/hosts).
 // Returns true on success.
 func forwardToRealModels(s *Server, w http.ResponseWriter, r *http.Request) bool {
-	url := fmt.Sprintf("https://%s/api/v1/models", s.Config.Hijack)
+	url := "https://" + s.Config.Hijack + "/api/v1/models"
 	req, err := http.NewRequestWithContext(r.Context(), "GET", url, nil)
 	if err != nil {
-		fmt.Printf("[models] build request error: %v\n", err)
+		s.Logger.Error("models build request error", "err", err)
 		return false
 	}
 	// Forward Accept header; intentionally omit Authorization (public endpoint).
@@ -39,13 +38,13 @@ func forwardToRealModels(s *Server, w http.ResponseWriter, r *http.Request) bool
 
 	resp, err := s.BypassClient.Do(req)
 	if err != nil {
-		fmt.Printf("[models] upstream error: %v\n", err)
+		s.Logger.Error("models upstream error", "err", err)
 		return false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Printf("[models] upstream returned %d\n", resp.StatusCode)
+		s.Logger.Warn("models upstream non-200", "status", resp.StatusCode)
 		return false
 	}
 

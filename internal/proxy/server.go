@@ -10,16 +10,19 @@ import (
 	"time"
 
 	"github.com/zhangyc/trae-proxy/internal/config"
+	"github.com/zhangyc/trae-proxy/internal/logging"
 )
+
 
 type Server struct {
 	Config       *config.Config
+	Logger       *logging.Logger
 	HTTPClient   *http.Client
 	BypassClient *http.Client // uses public DNS (1.1.1.1), ignores /etc/hosts
 	TLSConfig    *tls.Config
 }
 
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
 	// BypassClient: custom resolver via 1.1.1.1 to bypass the /etc/hosts hijack.
 	// PreferGo forces the pure-Go DNS resolver, enabling the custom Dial.
 	resolver := &net.Resolver{
@@ -60,6 +63,7 @@ func NewServer(cfg *config.Config) *Server {
 
 	return &Server{
 		Config: cfg,
+		Logger: logger,
 		HTTPClient: &http.Client{
 			Transport: &http.Transport{
 				DialContext:           dialer.DialContext,
@@ -90,12 +94,12 @@ func (s *Server) Handler() http.Handler {
 			HandleModels(s)(w, r)
 		case r.Method == "POST" && norm == "v1/chat/completions":
 			if s.Config.UpstreamProtocol == "openai" {
-				HandleForward(s.Config, s.HTTPClient)(w, r)
+				HandleForward(s.Config, s.Logger, s.HTTPClient)(w, r)
 			} else {
-				HandleChatCompletions(s.Config, s.HTTPClient)(w, r)
+				HandleChatCompletions(s.Config, s.Logger, s.HTTPClient)(w, r)
 			}
 		default:
-			HandleForward(s.Config, s.HTTPClient)(w, r)
+			HandleForward(s.Config, s.Logger, s.HTTPClient)(w, r)
 		}
 	})
 }
@@ -130,7 +134,11 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		srv.Shutdown(shutdownCtx)
 	}()
 
-	fmt.Printf("[trae-proxy] listening on %s → %s (upstream: %s)\n", s.Config.Listen, s.Config.Upstream, s.Config.UpstreamProtocol)
+	s.Logger.Info("listening",
+		"addr", s.Config.Listen,
+		"upstream", s.Config.Upstream,
+		"protocol", s.Config.UpstreamProtocol,
+	)
 
 	if s.TLSConfig != nil {
 		ln = tls.NewListener(ln, s.TLSConfig)
