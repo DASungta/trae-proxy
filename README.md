@@ -69,15 +69,14 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 **macOS 注意事项：**
 - 支持 Apple Silicon (M1/M2/M3/M4) 和 Intel，安装脚本自动检测
 - `init` 时 CA 证书通过 `security add-trusted-cert` 安装到系统钥匙串，首次执行可能弹出密码确认框
-- 如果浏览器仍提示证书不信任，重启浏览器或重新执行 `sudo trae-proxy init`
+
 
 **Linux 注意事项：**
 - 目前支持 x86_64 (amd64) 架构
 - `init` 时 CA 证书复制到 `/usr/local/share/ca-certificates/` 并执行 `update-ca-certificates`
 - RHEL/CentOS 无 `update-ca-certificates`：手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到 `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`
 - 某些发行版 DNS 缓存（systemd-resolved）需手动刷新：`sudo systemd-resolve --flush-caches`
-- snap 版浏览器（如 Ubuntu 的 Firefox）有独立证书存储，可能不信任系统 CA，建议改用 apt 安装的浏览器
-
+- 
 #### Windows（手动安装）
 
 1. 从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
