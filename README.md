@@ -2,9 +2,16 @@
 
 让 Trae 接入任意 Anthropic Messages API 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
 
+**当前版本支持的上游类型：**
+- 各类 Claude 中转站（sub2api、one-api 等）
+- 支持 Anthropic Messages API 的云服务（讯飞星火、京东云等）
+- 自建的 Anthropic 协议兼容服务
+
+> 上游必须兼容 Anthropic Messages API（`POST /v1/messages`）。
+
 ## 它解决什么问题
 
-Trae 通过 `openrouter.ai` 作为模型 API 地址。当你想将请求转发到自己部署的中转服务（如 sub2api）时，需要处理以下差异：
+Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
 
 - **协议转换**：Trae 发送 OpenAI Chat Completions 格式，大多数中转服务只接受 Anthropic Messages 格式
 - **模型名映射**：Trae 发送 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
@@ -183,12 +190,18 @@ sudo trae-proxy uninstall --purge
 
 ```toml
 # 上游 Anthropic Messages API 地址
+# 支持任意兼容 Anthropic Messages API 的端点，例如：
+#   中转站：  http://your-relay-server:8080
+#   讯飞星火：https://spark-api-open.xf-yun.com
+#   京东云：  https://your-jdcloud-endpoint
 upstream = "http://192.168.48.12:8080"
 
 # HTTPS 监听地址
 listen = ":443"
 
-# 劫持的域名（写入 /etc/hosts）
+# 劫持的域名（写入 /etc/hosts），默认 openrouter.ai
+# Trae 默认将 API 请求发往 openrouter.ai，无需修改
+# 如果你想劫持其他域名，在此修改，并同步更新 Trae 的 API 地址配置
 hijack = "openrouter.ai"
 
 # 模型名映射：请求中的名称 → 上游名称
