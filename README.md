@@ -50,16 +50,7 @@ trae-proxy :443  (内置 TLS，自签证书)
 
 ## 快速开始
 
-### 第零步
-
-- 安装好Trae，国内海外任意
-- 设置->模型->添加模型
-- 工具默认配置是劫持OpenRouter，所以服务商选择OpenRouter
-- 模型选择第一个即可，Anthropic:Claude Sonnet 4.5 (Anthropic随便选即可)
-- *关键* 填入你上游服务的API密钥
-- 添加模型，trae在这一步不会校验。延迟一会就会在自定义模型列表中出现了。
-
-### 安装（在安装前执行上面的步骤！）
+### 第一步：安装
 
 #### macOS / Linux（一键安装）
 
@@ -125,7 +116,7 @@ make install    # 编译并安装到 /usr/local/bin
 
 </details>
 
-### 初始化（首次使用，一次性操作）
+### 第二步：初始化
 
 ```bash
 sudo trae-proxy init
@@ -136,15 +127,26 @@ sudo trae-proxy init
 - 将 Root CA 安装到系统信任库（需要管理员权限）
 - 创建默认配置文件 `~/.config/trae-proxy/config.toml`
 
-### 配置上游地址
-
 编辑 `~/.config/trae-proxy/config.toml`，将 `upstream` 改为你的中转服务地址：
 
 ```toml
 upstream = "http://your-server:8080"
 ```
 
-### 启动
+### 第三步：配置 Trae
+
+- 安装好 Trae，国内海外任意
+- 设置 → 模型 → 添加模型
+- 工具默认配置是劫持 OpenRouter，所以服务商选择 OpenRouter
+- 模型选择第一个即可，Anthropic: Claude Sonnet 4.5（Anthropic 随便选即可）
+- **关键**：填入你上游服务的 API 密钥
+- 添加模型，Trae 在这一步不会校验。稍等片刻就会在自定义模型列表中出现了。
+
+![添加模型-选择服务商](doc/pics/图片1.png)
+
+![添加模型-填写密钥](doc/pics/图片2.png)
+
+### 第四步：启动
 
 ```bash
 # 前台运行（Ctrl+C 停止）
@@ -157,7 +159,11 @@ sudo trae-proxy start -d
 sudo trae-proxy start --upstream http://your-server:8080
 ```
 
-启动后，在 Trae 中配置自定义模型端点，将 API 地址指向 `https://openrouter.ai/api`，模型名使用 `anthropic/claude-sonnet-4.6` 等格式（与配置文件中的映射对应）。
+### 第五步：在 Trae 中验证
+
+启动后，在 Trae 中选择刚添加的模型，发送一条消息验证是否正常响应。
+
+![Trae 中验证效果](doc/pics/图片3.png)
 
 ### 停止
 
