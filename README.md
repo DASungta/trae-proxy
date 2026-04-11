@@ -1,21 +1,21 @@
 # trae-proxy
 
-将 Claude Code / Trae 等 AI 编程工具的 API 请求透明代理到任意 Anthropic Messages API 兼容的上游服务。单二进制，零依赖，跨平台，一键启动。
+让 Trae 接入任意 Anthropic Messages API 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
 
 ## 它解决什么问题
 
-Claude Code、Trae 等工具通过 `ANTHROPIC_BASE_URL` 环境变量指定 API 地址。但有些场景下，你需要将请求转发到自己部署的中转服务（如 sub2api），同时处理以下差异：
+Trae 通过 `openrouter.ai` 作为模型 API 地址。当你想将请求转发到自己部署的中转服务（如 sub2api）时，需要处理以下差异：
 
-- **协议转换**：部分客户端发送 OpenAI Chat Completions 格式，上游只接受 Anthropic Messages 格式
-- **模型名映射**：客户端使用 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
+- **协议转换**：Trae 发送 OpenAI Chat Completions 格式，大多数中转服务只接受 Anthropic Messages 格式
+- **模型名映射**：Trae 发送 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
 - **TLS 证书**：HTTPS 请求需要受信任的证书，但目标域名指向 localhost
 
-trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换，让这一切对客户端完全透明。
+trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换，让这一切对 Trae 完全透明。
 
 ## 工作原理
 
 ```
-Claude Code / Trae  (ANTHROPIC_BASE_URL=https://openrouter.ai/api)
+Trae  (API → https://openrouter.ai/api)
       │
       ↓  /etc/hosts: openrouter.ai → 127.0.0.1
 trae-proxy :443  (内置 TLS，自签证书)
@@ -116,6 +116,14 @@ sudo trae-proxy init
 - 将 Root CA 安装到系统信任库（需要管理员权限）
 - 创建默认配置文件 `~/.config/trae-proxy/config.toml`
 
+### 配置上游地址
+
+编辑 `~/.config/trae-proxy/config.toml`，将 `upstream` 改为你的中转服务地址：
+
+```toml
+upstream = "http://your-server:8080"
+```
+
 ### 启动
 
 ```bash
@@ -129,14 +137,7 @@ sudo trae-proxy start -d
 sudo trae-proxy start --upstream http://your-server:8080
 ```
 
-启动后，在 Claude Code / Trae 中配置环境变量：
-
-```json
-{
-  "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
-  "ANTHROPIC_MODEL": "anthropic/claude-sonnet-4.6"
-}
-```
+启动后，在 Trae 中配置自定义模型端点，将 API 地址指向 `https://openrouter.ai/api`，模型名使用 `anthropic/claude-sonnet-4.6` 等格式（与配置文件中的映射对应）。
 
 ### 停止
 
@@ -219,7 +220,7 @@ CLI flags > 环境变量 > config.toml > 内置默认值
 
 ### GET /v1/models
 
-返回配置文件 `[models]` 中所有 key 组成的模型列表，格式兼容 OpenRouter。不会调用上游。用于客户端（如 Trae）验证模型 ID。
+返回配置文件 `[models]` 中所有 key 组成的模型列表，格式兼容 OpenRouter。不会调用上游。用于 Trae 验证模型 ID。
 
 ### POST /v1/chat/completions
 
