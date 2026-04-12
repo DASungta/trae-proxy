@@ -1,66 +1,38 @@
 # Trae Proxy
 
-让 Trae 接入任意 Anthropic 或 OpenAI 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
+让 Trae 接入任意 Anthropic 或 OpenAI 兼容的自定义模型端点。
+
+**特点：**
+
+- 单二进制，零依赖，跨平台，一键启动。
+- 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改），不影响本地openai、claude等其他服务的正常使用。
 
 **支持的上游类型：**
-- 各类 Claude 中转站（sub2api、one-api 等）
-- 支持 Anthropic Messages API 的云服务（讯飞星火、京东云等）
-- 自建的 Anthropic 协议兼容服务
-- **OpenAI-compatible 服务**（openrouter.ai 真实端点、LM Studio、Ollama、vLLM 等）
+
+- 各类中转站（sub2api、one-api、new-api等）
+- 支持 Anthropic Messages API / OpenAI Completions API 的云服务（讯飞星火、京东云、无问心穹、移动电信联通等等）
+- 自建的反代、中转（Antigravity等）
 
 ## 更新计划
 
-- 支持自动写入trae配置，实现一键安装
+- [x] 支持OpenAI Chat Completions
+- [ ] 支持一键导入Trae配置
+- [ ] init采用交互式命令行进行初始化配置
+- [ ] 支持同时对多个上游服务、多个模型进行代理
 
 ## 命令总览
 
-| 命令 | 说明 | 常用标志 |
-|---|---|---|
-| `init` | 生成 CA、安装系统信任、写默认配置文件 | — |
-| `start` | 启动代理（写入 hosts + 监听 443） | `-d` 后台，`--upstream`，`--listen`，`--config`，`-l`/`--log-level`，`--log-body` |
-| `stop` | 停止守护进程并移除 hosts 条目 | — |
-| `restart` | 重启守护进程并重新加载配置（未运行时直接以 daemon 模式启动） | 同 `start`（不含 `-d`） |
-| `status` | 显示 hosts / 守护进程 / 上游 / 模型映射数 | — |
-| `update` | 从 GitHub Releases 自更新（macOS/Linux） | `--version`，`--force` |
-| `uninstall` | 移除 CA 信任、hosts 条目、二进制本体；交互式询问是否删除配置目录 | `-y` / `--yes` 跳过交互 |
+| 命令          | 说明                                    | 常用标志                                                                       |
+|-------------|---------------------------------------|----------------------------------------------------------------------------|
+| `init`      | 生成 CA、安装系统信任、写默认配置文件                  | —                                                                          |
+| `start`     | 启动代理（写入 hosts + 监听 443）               | `-d` 后台，`--upstream`，`--listen`，`--config`，`-l`/`--log-level`，`--log-body` |
+| `stop`      | 停止守护进程并移除 hosts 条目                    | —                                                                          |
+| `restart`   | 重启守护进程并重新加载配置（未运行时直接以 daemon 模式启动）    | 同 `start`（不含 `-d`）                                                         |
+| `status`    | 显示 hosts / 守护进程 / 上游 / 模型映射数          | —                                                                          |
+| `update`    | 从 GitHub Releases 自更新（macOS/Linux）    | `--version`，`--force`                                                      |
+| `uninstall` | 移除 CA 信任、hosts 条目、二进制本体；交互式询问是否删除配置目录 | `-y` / `--yes` 跳过交互                                                        |
 
 所有命令都支持 `--help` 查看完整参数说明。
-
-## 它解决什么问题
-
-Trae 通过 `openrouter.ai` 作为模型 API 地址（默认劫持域名，可在配置中修改）。当你想将请求转发到自己部署的中转服务时，需要处理以下差异：
-
-- **协议转换**：Trae 发送 OpenAI Chat Completions 格式，部分中转服务只接受 Anthropic Messages 格式
-- **模型名映射**：Trae 发送 `anthropic/claude-sonnet-4.6`，上游需要 `claude-sonnet-4-6`
-- **TLS 证书**：HTTPS 请求需要受信任的证书，但目标域名指向 localhost
-
-trae-proxy 通过 DNS 劫持 + TLS 自签 + 协议转换（或直接透传），让这一切对 Trae 完全透明。
-
-## 工作原理
-
-```
-Trae  (API → https://openrouter.ai/api)
-      │
-      ↓  /etc/hosts: openrouter.ai → 127.0.0.1
-trae-proxy :443  (内置 TLS，自签证书)
-      │
-      ├─ GET  /v1/models           → 返回配置中的模型列表（无上游调用）
-      ├─ POST /v1/chat/completions
-      │     ├─ upstream_protocol = "anthropic" → 转换为 Anthropic Messages → 上游 → 转换回
-      │     └─ upstream_protocol = "openai"    → 模型名映射 → 直接透传
-      └─ POST /v1/messages + 其他  → 去掉 /api 前缀 + 模型名映射 → 透传
-      │
-      ↓
-上游（Anthropic Messages API 或 OpenAI Chat Completions API）
-```
-
-**核心流程：**
-
-1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`（默认设置的hack地址是`openrouter.ai`）
-2. trae-proxy 在 443 端口用自签证书接收 HTTPS 请求
-3. 处理服务商调用地址的映射
-4. 根据路由选择透传或协议转换
-5. 将请求转发到上游，流式响应实时回传
 
 ## 快速开始
 
@@ -89,7 +61,8 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 
 - 目前支持 x86_64 (amd64) 架构
 - `init` 时 CA 证书复制到 `/usr/local/share/ca-certificates/` 并执行 `update-ca-certificates`
-- RHEL/CentOS 无 `update-ca-certificates`：手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到 `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`
+- RHEL/CentOS 无 `update-ca-certificates`：手动将 `~/.config/trae-proxy/ca/root-ca.pem` 复制到
+  `/etc/pki/ca-trust/source/anchors/` 并执行 `update-ca-trust`
 - 某些发行版 DNS 缓存（systemd-resolved）需手动刷新：`sudo systemd-resolve --flush-caches`
 
 </details>
@@ -119,12 +92,12 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 
 从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载对应平台的文件：
 
-| 平台 | 文件名 |
-|------|--------|
-| macOS Apple Silicon | `trae-proxy-darwin-arm64` |
-| macOS Intel | `trae-proxy-darwin-amd64` |
-| Linux x86_64 | `trae-proxy-linux-amd64` |
-| Windows x86_64 | `trae-proxy-windows-amd64.exe` |
+| 平台                  | 文件名                            |
+|---------------------|--------------------------------|
+| macOS Apple Silicon | `trae-proxy-darwin-arm64`      |
+| macOS Intel         | `trae-proxy-darwin-amd64`      |
+| Linux x86_64        | `trae-proxy-linux-amd64`       |
+| Windows x86_64      | `trae-proxy-windows-amd64.exe` |
 
 ```bash
 chmod +x trae-proxy-darwin-arm64
@@ -148,6 +121,7 @@ sudo trae-proxy init
 ```
 
 这一步会：
+
 - 生成本地 Root CA 和服务端证书（存放在 `~/.config/trae-proxy/ca/`）
 - 将 Root CA 安装到系统信任库（需要管理员权限）
 - 创建默认配置文件 `~/.config/trae-proxy/config.toml`
@@ -309,25 +283,26 @@ hijack = "openrouter.ai"
 "anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
 "anthropic/claude-sonnet-4-6" = "claude-sonnet-4-6"
 "anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
-"anthropic/claude-haiku-4.5"  = "claude-haiku-4-5-20251001"
-"anthropic/claude-opus-4.6"   = "claude-opus-4-6"
+"anthropic/claude-haiku-4.5" = "claude-haiku-4-5-20251001"
+"anthropic/claude-opus-4.6" = "claude-opus-4-6"
 ```
 
 ### 日志
 
 trae-proxy 使用 `log/slog` 分级输出，日志写到 stderr；后台模式下由守护进程重定向到 `~/.config/trae-proxy/trae-proxy.log`。
 
-| Level | 说明 |
-|---|---|
-| `error` | 只记录错误（上游 5xx、解析失败、TLS 握手错等） |
-| `warn` | + 降级行为（模型映射未命中、stale hosts 清理等） |
+| Level      | 说明                                                                  |
+|------------|---------------------------------------------------------------------|
+| `error`    | 只记录错误（上游 5xx、解析失败、TLS 握手错等）                                         |
+| `warn`     | + 降级行为（模型映射未命中、stale hosts 清理等）                                     |
 | `info`（默认） | + 启动 banner + 每个请求一行摘要（method / path / status / dur_ms / bytes_out） |
-| `debug` | + 请求结构化字段（URL、脱敏后的 headers、model、stream），**不含 body** |
-| `trace` | + 四个 tap 点的原始工件：客户端请求 / 代理内部形态 / 上游请求 / 上游响应 |
+| `debug`    | + 请求结构化字段（URL、脱敏后的 headers、model、stream），**不含 body**                |
+| `trace`    | + 四个 tap 点的原始工件：客户端请求 / 代理内部形态 / 上游请求 / 上游响应                        |
 
 `Authorization` 和 `x-api-key` 请求头**在任何级别下都会打码为 `[REDACTED]`**。
 
-`trace` 级别默认只打印 body 的前 512 字节摘要；加 `log_body = true`（或 `--log-body` 标志 / `TRAE_LOG_BODY=1`）才会打印完整字节。流式响应最多累计 1MiB，超出截断并标注 `[truncated at 1MiB]`。
+`trace` 级别默认只打印 body 的前 512 字节摘要；加 `log_body = true`（或 `--log-body` 标志 / `TRAE_LOG_BODY=1`
+）才会打印完整字节。流式响应最多累计 1MiB，超出截断并标注 `[truncated at 1MiB]`。
 
 **配置方式**（写入 `~/.config/trae-proxy/config.toml`）：
 
@@ -339,6 +314,32 @@ log_body = false
 ### 配置优先级
 
 CLI flags > 环境变量（`TRAE_LOG_LEVEL`、`TRAE_LOG_BODY`）> config.toml > 内置默认值
+
+## 工作原理
+
+```
+Trae  (API → https://openrouter.ai/api)
+      │
+      ↓  /etc/hosts: openrouter.ai → 127.0.0.1
+trae-proxy :443  (内置 TLS，自签证书)
+      │
+      ├─ GET  /v1/models           → 返回配置中的模型列表（无上游调用）
+      ├─ POST /v1/chat/completions
+      │     ├─ upstream_protocol = "anthropic" → 转换为 Anthropic Messages → 上游 → 转换回
+      │     └─ upstream_protocol = "openai"    → 模型名映射 → 直接透传
+      └─ POST /v1/messages + 其他  → 去掉 /api 前缀 + 模型名映射 → 透传
+      │
+      ↓
+上游（Anthropic Messages API 或 OpenAI Chat Completions API）
+```
+
+**核心流程：**
+
+1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`（默认设置的hack地址是`openrouter.ai`）
+2. trae-proxy 在 443 端口用自签证书接收 HTTPS 请求
+3. 处理服务商调用地址的映射
+4. 根据路由选择透传或协议转换
+5. 将请求转发到上游，流式响应实时回传
 
 ## 技术细节
 
@@ -380,11 +381,11 @@ trae-proxy/
 
 系统信任安装按平台分派：
 
-| 平台 | 命令 |
-|------|------|
-| macOS | `security add-trusted-cert` → System Keychain |
-| Linux | 复制到 `/usr/local/share/ca-certificates/` + `update-ca-certificates` |
-| Windows | `certutil -addstore -f "ROOT"` |
+| 平台      | 命令                                                                 |
+|---------|--------------------------------------------------------------------|
+| macOS   | `security add-trusted-cert` → System Keychain                      |
+| Linux   | 复制到 `/usr/local/share/ca-certificates/` + `update-ca-certificates` |
+| Windows | `certutil -addstore -f "ROOT"`                                     |
 
 当 hijack 域名变更时，`init` 会自动检测 SAN 不匹配并重新签发服务端证书。
 
@@ -428,12 +429,12 @@ message_stop                 → data: [DONE]
 
 ### 错误处理
 
-| 场景 | 行为 |
-|------|------|
-| 上游返回 HTTP 错误 | 原样透传 status code + body |
-| 上游不可达 | 返回 502 + `{"error": {"message": "upstream unreachable: <addr>", "type": "proxy_error"}}` |
-| 请求 JSON 解析失败 | 原样透传不做转换 |
-| 响应 JSON 解析失败 | 原样透传不做转换 |
+| 场景           | 行为                                                                                       |
+|--------------|------------------------------------------------------------------------------------------|
+| 上游返回 HTTP 错误 | 原样透传 status code + body                                                                  |
+| 上游不可达        | 返回 502 + `{"error": {"message": "upstream unreachable: <addr>", "type": "proxy_error"}}` |
+| 请求 JSON 解析失败 | 原样透传不做转换                                                                                 |
+| 响应 JSON 解析失败 | 原样透传不做转换                                                                                 |
 
 ### 转发的请求头
 
@@ -446,11 +447,11 @@ anthropic-version, anthropic-beta, Accept
 
 ## 依赖
 
-| 依赖 | 用途 |
-|------|------|
-| [cobra](https://github.com/spf13/cobra) | CLI 框架 |
-| [toml](https://github.com/BurntSushi/toml) | 配置文件解析 |
-| Go 标准库 | net/http、crypto/tls、crypto/x509、encoding/json 等 |
+| 依赖                                         | 用途                                              |
+|--------------------------------------------|-------------------------------------------------|
+| [cobra](https://github.com/spf13/cobra)    | CLI 框架                                          |
+| [toml](https://github.com/BurntSushi/toml) | 配置文件解析                                          |
+| Go 标准库                                     | net/http、crypto/tls、crypto/x509、encoding/json 等 |
 
 无运行时依赖。编译后为单个静态二进制文件。
 
@@ -458,7 +459,8 @@ anthropic-version, anthropic-beta, Accept
 
 - 代理运行期间，`openrouter.ai`（或配置的 hijack 域名）在本机解析到 localhost，**真实的 OpenRouter 服务不可访问**
 - 监听 443 端口和修改 `/etc/hosts` 需要管理员权限
-- `upstream_protocol = "anthropic"` 模式要求上游兼容 Anthropic Messages API（`POST /v1/messages`）；`upstream_protocol = "openai"` 模式要求上游兼容 OpenAI Chat Completions API（`POST /v1/chat/completions`）
+- `upstream_protocol = "anthropic"` 模式要求上游兼容 Anthropic Messages API（`POST /v1/messages`）；
+  `upstream_protocol = "openai"` 模式要求上游兼容 OpenAI Chat Completions API（`POST /v1/chat/completions`）
 - 自签 CA 仅影响本机，不会影响其他设备
 
 ## 许可证
