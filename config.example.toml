@@ -1,21 +1,18 @@
 # trae-proxy configuration
 
 # Upstream API address
+# 上游服务地址，路径不要包含/v1/messages或/v1/chat/completions
+# 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
+# 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
+# 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
+# 示例：- sub2api：直接填端点地址
 upstream = "http://192.168.48.12:8080"
 
 # Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
 # conversion. "openai" directly forwards OpenAI Chat Completions — use this when
-# upstream is OpenAI-compatible (openrouter.ai, LM Studio, Ollama, most relays).
+# upstream is OpenAI-compatible (LM Studio, Ollama, most relays).
+# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
 upstream_protocol = "anthropic"
-
-# Log level: error | warn | info (default) | debug | trace
-# trace adds four tap points per request: client body, proxy internal form,
-# upstream payload, upstream response. Authorization/x-api-key are always redacted.
-log_level = "info"
-
-# When true, the trace level prints full request/response bodies.
-# Leave false unless debugging payloads — bodies may contain API keys / secrets.
-log_body = false
 
 # HTTPS listen address
 listen = ":443"
@@ -29,12 +26,8 @@ hijack = "openrouter.ai"
 
 # Model mapping: request model name → upstream model name
 # 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
+# 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
+# 将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
-"anthropic/claude-sonnet-4-6" = "claude-sonnet-4-6"
 "anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
-"anthropic/claude-sonnet-4-5" = "claude-sonnet-4-5-20251001"
-"anthropic/claude-haiku-4.5" = "claude-haiku-4-5-20251001"
-"anthropic/claude-haiku-4-5" = "claude-haiku-4-5-20251001"
-"anthropic/claude-opus-4.6" = "claude-opus-4-6"
-"anthropic/claude-opus-4-6" = "claude-opus-4-6"
+"openai/gpt-5" = "glm5"
