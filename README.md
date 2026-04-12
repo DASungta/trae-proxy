@@ -253,19 +253,20 @@ sudo trae-proxy uninstall -y
 配置文件路径：`~/.config/trae-proxy/config.toml`
 
 ```toml
-# 上游 API 地址
+# 上游 API 地址（路径不要包含 /v1/messages 或 /v1/chat/completions）
 # 支持任意兼容 Anthropic Messages API 或 OpenAI Chat Completions 的端点，例如：
-#   中转站：  http://your-relay-server:8080
-#   讯飞星火：https://spark-api-open.xf-yun.com
-#   京东云：  https://your-jdcloud-endpoint
-#   OpenRouter 真实端点、LM Studio、Ollama、vLLM 等
+#   中转站：  http://your-relay-server:8080（sub2api、one-api、new-api 等直接填端点地址）
+#   移动云：  https://ai.bayesdl.com/api/maas/
+#   京东云：  https://modelservice.jdcloud.com/coding/openai（OpenAI）
+#             https://modelservice.jdcloud.com/coding/anthropic（Anthropic）
+#   LM Studio、Ollama、vLLM 等
 upstream = "http://your-server:8080"
 
 # 上游协议（可选，默认 "anthropic"）
 # "anthropic" — 将 Trae 发出的 OpenAI Chat Completions 请求转换为 Anthropic Messages 格式后转发，
 #               适用于各类 Claude 中转站、讯飞星火、京东云等兼容 Anthropic API 的服务
 # "openai"    — 直接透传，不做协议转换，仅映射模型名，
-#               适用于 openrouter.ai 真实端点、LM Studio、Ollama、vLLM 等 OpenAI-compatible 服务
+#               适用于各种OpenAI-compatible 服务
 upstream_protocol = "anthropic"
 
 # HTTPS 监听地址（默认 :443，需要管理员权限）
@@ -276,15 +277,16 @@ listen = ":443"
 # 如果你想劫持其他域名，在此修改，并同步更新 Trae 的 API 地址配置
 hijack = "openrouter.ai"
 
+# 设为 true 时，GET /v1/models 会转发到真实的 hijack 域名（绕过 /etc/hosts），
+# 而不是返回下方 [models] 配置的伪造列表
+# real_models = false
+
 # 模型名映射：Trae 发送的模型名 → 上游实际接受的模型名
-# 三级回退：① 精确匹配 → ② 去掉 anthropic/ 前缀 → ③ 原样透传
+# 三级回退：① 精确匹配 → ② 去掉 "anthropic/"/"openai/" 等前缀 → ③ 原样透传
 # 因此新模型通常无需手动添加映射
 [models]
-"anthropic/claude-sonnet-4.6" = "claude-sonnet-4-6"
-"anthropic/claude-sonnet-4-6" = "claude-sonnet-4-6"
 "anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
-"anthropic/claude-haiku-4.5" = "claude-haiku-4-5-20251001"
-"anthropic/claude-opus-4.6" = "claude-opus-4-6"
+"openai/gpt-5" = "glm5"
 ```
 
 ### 日志
