@@ -27,7 +27,17 @@ hijack = "openrouter.ai"
 # Model mapping: request model name → upstream model name
 # 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
 # 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
-# 将请求模型映射到上游服务提供的真实模型
+# 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
-"openai/gpt-5" = "glm5"
+"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
+"anthropic/claude-opus-4.1" = "claude-opus-4.6"
+"anthropic/claude-4-sonnet" = ""
+"anthropic/claude-4-opus" = ""
+"anthropic/claude-3.7-sonnet" = ""
+"openai/gpt-5" = "gpt-5.4"
+"openai/gpt-4.1" = ""
+"openai/gpt-4o" = ""
+"google/gemini-3-pro-perview" = ""
+"google/gemini-2.5-pro" = ""
+"minimax/minimax-m2" = ""
+"qwen/qwen3-coder" = ""
