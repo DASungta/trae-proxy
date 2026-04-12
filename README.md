@@ -1,4 +1,4 @@
-# trae-proxy
+# Trae Proxy
 
 让 Trae 接入任意 Anthropic 或 OpenAI 兼容的自定义模型端点。单二进制，零依赖，跨平台，一键启动。
 
@@ -56,9 +56,9 @@ trae-proxy :443  (内置 TLS，自签证书)
 
 **核心流程：**
 
-1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`
+1. `/etc/hosts` 将 `openrouter.ai` 指向 `127.0.0.1`（默认设置的hack地址是`openrouter.ai`）
 2. trae-proxy 在 443 端口用自签证书接收 HTTPS 请求
-3. 去掉 Anthropic SDK 添加的 `/api` 路径前缀
+3. 处理服务商调用地址的映射
 4. 根据路由选择透传或协议转换
 5. 将请求转发到上游，流式响应实时回传
 
