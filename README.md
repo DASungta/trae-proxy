@@ -283,10 +283,20 @@ hijack = "openrouter.ai"
 
 # 模型名映射：Trae 发送的模型名 → 上游实际接受的模型名
 # 三级回退：① 精确匹配 → ② 去掉 "anthropic/"/"openai/" 等前缀 → ③ 原样透传
-# 因此新模型通常无需手动添加映射
+# 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4-5-20251001"
-"openai/gpt-5" = "glm5"
+"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
+"anthropic/claude-opus-4.1" = "claude-opus-4.6"
+"anthropic/claude-4-sonnet" = ""
+"anthropic/claude-4-opus" = ""
+"anthropic/claude-3.7-sonnet" = ""
+"openai/gpt-5" = "gpt-5.4"
+"openai/gpt-4.1" = ""
+"openai/gpt-4o" = ""
+"google/gemini-3-pro-perview" = ""
+"google/gemini-2.5-pro" = ""
+"minimax/minimax-m2" = ""
+"qwen/qwen3-coder" = ""
 ```
 
 ### 日志
