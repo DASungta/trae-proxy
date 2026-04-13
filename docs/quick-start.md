@@ -46,11 +46,10 @@ sudo trae-proxy init
 ![初始化向导-选择模型](./pics/t4.png)
 
 输入映射的实际模型
+
 ![初始化向导-映射](./pics/t5.png)
 
-回车确认
-
-配置文件保存在 `~/.config/trae-proxy/config.toml`，可以手动编辑修改。
+回车确认。配置文件保存在 `~/.config/trae-proxy/config.toml`，可以手动编辑修改。
 
 ---
 
