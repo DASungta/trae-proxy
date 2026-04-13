@@ -17,14 +17,14 @@
 
 - [x] 支持OpenAI Chat Completions
 - [ ] 支持一键导入Trae配置
-- [ ] init采用交互式命令行进行初始化配置
+- [x] init采用交互式命令行进行初始化配置
 - [ ] 支持同时对多个上游服务、多个模型进行代理
 
 ## 命令总览
 
 | 命令          | 说明                                    | 常用标志                                                                       |
 |-------------|---------------------------------------|----------------------------------------------------------------------------|
-| `init`      | 生成 CA、安装系统信任、写默认配置文件                  | —                                                                          |
+| `init`      | 交互式向导：配置上游地址、协议、模型映射，生成 CA 并安装系统信任 | `-y` / `--yes` 跳过向导使用默认配置                                              |
 | `start`     | 启动代理（写入 hosts + 监听 443）               | `-d` 后台，`--upstream`，`--listen`，`--config`，`-l`/`--log-level`，`--log-body` |
 | `stop`      | 停止守护进程并移除 hosts 条目                    | —                                                                          |
 | `restart`   | 重启守护进程并重新加载配置（未运行时直接以 daemon 模式启动）    | 同 `start`（不含 `-d`）                                                         |
@@ -120,25 +120,20 @@ make install    # 编译并安装到 /usr/local/bin
 sudo trae-proxy init
 ```
 
-这一步会：
+这一步会启动交互式向导，引导你完成以下配置：
+
+1. **上游服务地址** — 输入你的中转服务 / API 端点地址（自动校验格式）
+2. **上游协议** — 选择 `anthropic`（需要协议转换）或 `openai`（直接透传）
+3. **模型映射** — 从 Trae 支持的 OpenRouter 模型列表中选一个，并指定上游实际接受的模型名称
+
+向导完成后，还会自动：
 
 - 生成本地 Root CA 和服务端证书（存放在 `~/.config/trae-proxy/ca/`）
 - 将 Root CA 安装到系统信任库（需要管理员权限）
-- 创建默认配置文件 `~/.config/trae-proxy/config.toml`
+- 将配置写入 `~/.config/trae-proxy/config.toml`
 
-编辑 `~/.config/trae-proxy/config.toml`，将 `upstream` 改为你的中转服务地址：，填写中转服务的协议，将 `models` 中的映射模型改成你的目标模型
-
-```toml
-upstream = "http://your-server:8080"
-
-# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
-upstream_protocol = "anthropic"
-
-[models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
-"openai/gpt-5" = "glm-5"
-
-```
+> 如需跳过向导使用默认配置：`sudo trae-proxy init --yes`
+> 配置文件生成后，你随时可以编辑 `~/.config/trae-proxy/config.toml` 调整更多选项（如添加多个模型映射）。
 
 
 ### 第三步：配置 Trae
@@ -369,6 +364,7 @@ trae-proxy :443  (内置 TLS，自签证书)
 ```
 trae-proxy/
 ├── cmd/trae-proxy/main.go           # CLI 入口（cobra）
+├── cmd/trae-proxy/wizard.go         # init 交互式向导
 ├── internal/
 │   ├── config/config.go             # TOML 配置、模型映射
 │   ├── logging/logger.go            # 分级日志（slog）+ 敏感 header 脱敏

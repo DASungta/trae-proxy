@@ -72,7 +72,9 @@ func main() {
 }
 
 func initCmd() *cobra.Command {
-	return &cobra.Command{
+	var yes bool
+
+	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Generate CA, install trust, create default config",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -98,14 +100,21 @@ func initCmd() *cobra.Command {
 
 			configPath := filepath.Join(dir, "config.toml")
 			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				src, err := os.ReadFile("config.example.toml")
-				if err != nil {
-					cfg := config.DefaultConfig()
-					fmt.Printf("[init] generating default config at %s\n", configPath)
-					_ = writeDefaultConfig(configPath, cfg)
+				interactive := !yes && isTerminal(os.Stdin)
+				if interactive {
+					if err := runWizard(configPath, os.Stdin, os.Stdout); err != nil {
+						return fmt.Errorf("wizard: %w", err)
+					}
 				} else {
-					os.WriteFile(configPath, src, 0644)
-					fmt.Printf("[init] config copied to %s\n", configPath)
+					src, err := os.ReadFile("config.example.toml")
+					if err != nil {
+						cfg := config.DefaultConfig()
+						fmt.Printf("[init] generating default config at %s\n", configPath)
+						_ = writeDefaultConfig(configPath, cfg)
+					} else {
+						os.WriteFile(configPath, src, 0644)
+						fmt.Printf("[init] config copied to %s\n", configPath)
+					}
 				}
 			} else {
 				fmt.Printf("[init] config already exists at %s\n", configPath)
@@ -142,9 +151,14 @@ func initCmd() *cobra.Command {
 			}
 
 			fmt.Println("\n[init] done! Run 'trae-proxy start' to begin.")
+			fmt.Println("[init] 提示：请打开 Trae，在模型设置中选择对应的模型即可使用。")
+			fmt.Println("[init] 如需调整更多配置，可编辑", configPath)
 			return nil
 		},
 	}
+
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip interactive wizard and use default config")
+	return cmd
 }
 
 func startCmd() *cobra.Command {
