@@ -2,15 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v0.3.1-beta.1] - 2026-04-14
+## [v0.3.1] - 2026-04-14
 
 ### Features
 
-- **百度千帆 Coding Plan 兼容**：`upstream` 配置项现在同时支持填写基础地址或完整端点 URL。
-  - OpenAI 协议示例：`https://qianfan.baidubce.com/v2/coding` 或 `https://qianfan.baidubce.com/v2/coding/chat/completions`
-  - Anthropic 协议示例：`https://qianfan.baidubce.com/anthropic/coding` 或 `https://qianfan.baidubce.com/anthropic/coding/v1/messages`
-  - 通过路径后缀自动识别，无需额外配置字段，存量配置文件无需修改。
-- 初始化向导更新：提示文字新增千帆双形式示例，`writeWizardConfig` 注释同步更新。
+- **支持完整端点 URL 作为 upstream 地址**：`upstream` 配置项现在同时接受基础地址和完整端点 URL，trae-proxy 通过路径后缀自动识别，无需额外配置字段。
+  - 填写基础地址时行为与旧版完全一致（向下兼容，存量配置文件无需修改）
+  - 填写完整端点 URL 时，请求直接发往该 URL，不再拼接 `/v1/messages` 或 `/v1/chat/completions`
+  - 适用于所有非标准路径的上游服务，例如百度千帆 Coding Plan：
+    - OpenAI 协议：`https://qianfan.baidubce.com/v2/coding/chat/completions`（路径无 `/v1` 前缀）
+    - Anthropic 协议：`https://qianfan.baidubce.com/anthropic/coding/v1/messages`
+- 初始化向导同步更新，提示文字新增完整端点 URL 示例
 
 ---
 
