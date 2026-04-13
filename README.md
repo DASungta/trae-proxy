@@ -126,18 +126,27 @@ sudo trae-proxy init
 - 将 Root CA 安装到系统信任库（需要管理员权限）
 - 创建默认配置文件 `~/.config/trae-proxy/config.toml`
 
-编辑 `~/.config/trae-proxy/config.toml`，将 `upstream` 改为你的中转服务地址：
+编辑 `~/.config/trae-proxy/config.toml`，将 `upstream` 改为你的中转服务地址：，填写中转服务的协议，将 `models` 中的映射模型改成你的目标模型
 
 ```toml
 upstream = "http://your-server:8080"
+
+# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
+upstream_protocol = "anthropic"
+
+[models]
+"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
+"openai/gpt-5" = "glm-5"
+
 ```
+
 
 ### 第三步：配置 Trae
 
 - 安装好 Trae，国内海外任意
 - 设置 → 模型 → 添加模型
 - 工具默认配置是劫持 OpenRouter，所以服务商选择 OpenRouter
-- 模型选择第一个即可，Anthropic: Claude Sonnet 4.5（Anthropic 随便选即可）
+- 模型选择第一个即可，Anthropic: Claude Sonnet 4.5 *(选择在配置文件中配置的对应模型)*
 - **关键**：填入你上游服务的 API 密钥
 - 添加模型，Trae 在这一步不会校验。稍等片刻就会在自定义模型列表中出现了。
 
