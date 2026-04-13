@@ -89,7 +89,7 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 
 		upstreamBody, _ := json.Marshal(anthropicReq)
 
-		url := cfg.Upstream + "/v1/messages"
+		url := cfg.ResolveUpstreamURL("/v1/messages")
 		req, err := http.NewRequestWithContext(r.Context(), "POST", url, strings.NewReader(string(upstreamBody)))
 		if err != nil {
 			status = http.StatusBadGateway

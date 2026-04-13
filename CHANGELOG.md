@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.1-beta.1] - 2026-04-14
+
+### Features
+
+- **百度千帆 Coding Plan 兼容**：`upstream` 配置项现在同时支持填写基础地址或完整端点 URL。
+  - OpenAI 协议示例：`https://qianfan.baidubce.com/v2/coding` 或 `https://qianfan.baidubce.com/v2/coding/chat/completions`
+  - Anthropic 协议示例：`https://qianfan.baidubce.com/anthropic/coding` 或 `https://qianfan.baidubce.com/anthropic/coding/v1/messages`
+  - 通过路径后缀自动识别，无需额外配置字段，存量配置文件无需修改。
+- 初始化向导更新：提示文字新增千帆双形式示例，`writeWizardConfig` 注释同步更新。
+
+---
+
 ## [v0.3.0] - 2026-04-14
 
 ### Features

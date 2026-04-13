@@ -95,3 +95,79 @@ func TestLoadLogLevelInvalid(t *testing.T) {
 		t.Errorf("expected error for invalid log_level, got nil")
 	}
 }
+
+func TestResolveUpstreamURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		upstream string
+		apiPath  string
+		wantURL  string
+		wantBase string // expected cfg.Upstream after parseUpstreamURL
+	}{
+		{
+			name:     "base URL + /v1/messages",
+			upstream: "https://api.example.com",
+			apiPath:  "/v1/messages",
+			wantURL:  "https://api.example.com/v1/messages",
+			wantBase: "https://api.example.com",
+		},
+		{
+			name:     "base URL + /v1/chat/completions",
+			upstream: "https://api.example.com",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://api.example.com/v1/chat/completions",
+			wantBase: "https://api.example.com",
+		},
+		{
+			name:     "Qianfan Anthropic full URL resolves messages path",
+			upstream: "https://qianfan.baidubce.com/anthropic/coding/v1/messages",
+			apiPath:  "/v1/messages",
+			wantURL:  "https://qianfan.baidubce.com/anthropic/coding/v1/messages",
+			wantBase: "https://qianfan.baidubce.com/anthropic/coding",
+		},
+		{
+			name:     "Qianfan OpenAI full URL resolves chat/completions path",
+			upstream: "https://qianfan.baidubce.com/v2/coding/chat/completions",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://qianfan.baidubce.com/v2/coding/chat/completions",
+			wantBase: "https://qianfan.baidubce.com/v2/coding",
+		},
+		{
+			name:     "Qianfan OpenAI base URL appends /v1/chat/completions",
+			upstream: "https://qianfan.baidubce.com/v2/coding",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://qianfan.baidubce.com/v2/coding/v1/chat/completions",
+			wantBase: "https://qianfan.baidubce.com/v2/coding",
+		},
+		{
+			name:     "standard full /v1/chat/completions URL",
+			upstream: "https://api.example.com/v1/chat/completions",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://api.example.com/v1/chat/completions",
+			wantBase: "https://api.example.com/v1",
+		},
+		{
+			name:     "Anthropic full URL does not match chat/completions path",
+			upstream: "https://qianfan.baidubce.com/anthropic/coding/v1/messages",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://qianfan.baidubce.com/anthropic/coding/v1/chat/completions",
+			wantBase: "https://qianfan.baidubce.com/anthropic/coding",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{Upstream: tt.upstream}
+			cfg.parseUpstreamURL()
+
+			if cfg.Upstream != tt.wantBase {
+				t.Errorf("cfg.Upstream = %q, want %q", cfg.Upstream, tt.wantBase)
+			}
+
+			got := cfg.ResolveUpstreamURL(tt.apiPath)
+			if got != tt.wantURL {
+				t.Errorf("ResolveUpstreamURL(%q) = %q, want %q", tt.apiPath, got, tt.wantURL)
+			}
+		})
+	}
+}

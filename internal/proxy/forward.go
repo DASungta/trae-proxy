@@ -89,7 +89,12 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 			}
 		}
 
-		url := cfg.Upstream + upstreamPath
+		var url string
+		if strings.HasSuffix(upstreamPath, "/chat/completions") {
+			url = cfg.ResolveUpstreamURL(upstreamPath)
+		} else {
+			url = cfg.Upstream + upstreamPath
+		}
 		req, err := http.NewRequestWithContext(r.Context(), r.Method, url, strings.NewReader(string(body)))
 		if err != nil {
 			status = http.StatusBadGateway
