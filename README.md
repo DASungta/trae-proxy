@@ -13,6 +13,10 @@
 - 支持 Anthropic Messages API / OpenAI Completions API 的云服务（讯飞星火、京东云、无问心穹、移动电信联通等等）
 - 自建的反代、中转（Antigravity等）
 
+## 快速开始
+
+> mac/Linux用户？看这里：[快速开始指南 →](docs/quick-start.md)
+
 ## 更新计划
 
 - [x] 支持OpenAI Chat Completions
@@ -24,7 +28,7 @@
 
 | 命令          | 说明                                    | 常用标志                                                                       |
 |-------------|---------------------------------------|----------------------------------------------------------------------------|
-| `init`      | 交互式向导：配置上游地址、协议、模型映射，生成 CA 并安装系统信任 | `-y` / `--yes` 跳过向导使用默认配置                                              |
+| `init`      | 交互式向导：配置上游地址、协议、模型映射，生成 CA 并安装系统信任    | `-y` / `--yes` 跳过向导使用默认配置                                                  |
 | `start`     | 启动代理（写入 hosts + 监听 443）               | `-d` 后台，`--upstream`，`--listen`，`--config`，`-l`/`--log-level`，`--log-body` |
 | `stop`      | 停止守护进程并移除 hosts 条目                    | —                                                                          |
 | `restart`   | 重启守护进程并重新加载配置（未运行时直接以 daemon 模式启动）    | 同 `start`（不含 `-d`）                                                         |
@@ -134,7 +138,6 @@ sudo trae-proxy init
 
 > 如需跳过向导使用默认配置：`sudo trae-proxy init --yes`
 > 配置文件生成后，你随时可以编辑 `~/.config/trae-proxy/config.toml` 调整更多选项（如添加多个模型映射）。
-
 
 ### 第三步：配置 Trae
 
