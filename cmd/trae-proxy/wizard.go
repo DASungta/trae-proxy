@@ -43,14 +43,7 @@ func validateUpstreamURL(raw string) (string, error) {
 	}
 
 	path := strings.TrimRight(u.Path, "/")
-	if strings.HasSuffix(path, "/v1/messages") {
-		u.Path = strings.TrimSuffix(path, "/v1/messages")
-		return "", fmt.Errorf("地址不要包含 /v1/messages，请填写基础地址: %s", u.String())
-	}
-	if strings.HasSuffix(path, "/v1/chat/completions") {
-		u.Path = strings.TrimSuffix(path, "/v1/chat/completions")
-		return "", fmt.Errorf("地址不要包含 /v1/chat/completions，请填写基础地址: %s", u.String())
-	}
+	_ = path // path validated above via url.Parse; no further suffix restrictions
 
 	// Trim trailing slash for consistency.
 	result := strings.TrimRight(raw, "/")
@@ -60,13 +53,17 @@ func validateUpstreamURL(raw string) (string, error) {
 func promptUpstream(scanner *bufio.Scanner, out io.Writer) (string, error) {
 	fmt.Fprintln(out, "--- Step 1/3: 上游服务地址 ---")
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, "请输入上游 API 地址（只填基础地址，不要包含 /v1/messages 或 /v1/chat/completions）")
+	fmt.Fprintln(out, "请输入上游 API 地址（基础地址或完整端点 URL 均可）")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "示例：")
-	fmt.Fprintln(out, "  移动云:            https://ai.bayesdl.com/api/maas/")
-	fmt.Fprintln(out, "  京东云(OpenAI):     https://modelservice.jdcloud.com/coding/openai")
-	fmt.Fprintln(out, "  京东云(Anthropic):  https://modelservice.jdcloud.com/coding/anthropic")
-	fmt.Fprintln(out, "  sub2api:           http://your-server:8080")
+	fmt.Fprintln(out, "  移动云:                https://ai.bayesdl.com/api/maas/")
+	fmt.Fprintln(out, "  京东云(OpenAI):         https://modelservice.jdcloud.com/coding/openai")
+	fmt.Fprintln(out, "  京东云(Anthropic):      https://modelservice.jdcloud.com/coding/anthropic")
+	fmt.Fprintln(out, "  百度千帆(OpenAI):       https://qianfan.baidubce.com/v2/coding")
+	fmt.Fprintln(out, "                           或 https://qianfan.baidubce.com/v2/coding/chat/completions")
+	fmt.Fprintln(out, "  百度千帆(Anthropic):    https://qianfan.baidubce.com/anthropic/coding")
+	fmt.Fprintln(out, "                           或 https://qianfan.baidubce.com/anthropic/coding/v1/messages")
+	fmt.Fprintln(out, "  sub2api:               http://your-server:8080")
 	fmt.Fprintln(out)
 
 	for {
@@ -168,10 +165,14 @@ func writeWizardConfig(path, upstream, protocol, selectedModel, upstreamModel st
 	b.WriteString(`# trae-proxy configuration
 
 # Upstream API address
-# 上游服务地址，路径不要包含/v1/messages或/v1/chat/completions
+# 上游服务地址，支持填写基础地址或完整端点 URL（两种方式均可）
 # 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
 # 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
 # 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
+# 示例：- 百度千帆：OpenAI：https://qianfan.baidubce.com/v2/coding
+#                           或 https://qianfan.baidubce.com/v2/coding/chat/completions
+# 示例：- 百度千帆：Anthropic：https://qianfan.baidubce.com/anthropic/coding
+#                              或 https://qianfan.baidubce.com/anthropic/coding/v1/messages
 # 示例：- sub2api：直接填端点地址
 `)
 	fmt.Fprintf(&b, "upstream = %q\n", upstream)

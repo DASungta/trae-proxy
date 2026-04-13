@@ -25,9 +25,13 @@ func TestValidateUpstreamURL(t *testing.T) {
 		{name: "trim whitespace", input: "  https://api.example.com  ", want: "https://api.example.com"},
 		{name: "empty", input: "", wantErr: "不能为空"},
 		{name: "no scheme", input: "api.example.com", wantErr: "http:// 或 https://"},
-		{name: "contains /v1/messages", input: "https://api.example.com/v1/messages", wantErr: "/v1/messages"},
-		{name: "contains /v1/chat/completions", input: "https://api.example.com/v1/chat/completions", wantErr: "/v1/chat/completions"},
+		{name: "contains /v1/messages", input: "https://api.example.com/v1/messages", want: "https://api.example.com/v1/messages"},
+		{name: "contains /v1/chat/completions", input: "https://api.example.com/v1/chat/completions", want: "https://api.example.com/v1/chat/completions"},
 		{name: "path ok", input: "https://api.example.com/api/maas", want: "https://api.example.com/api/maas"},
+		{name: "Qianfan OpenAI full URL", input: "https://qianfan.baidubce.com/v2/coding/chat/completions", want: "https://qianfan.baidubce.com/v2/coding/chat/completions"},
+		{name: "Qianfan Anthropic full URL", input: "https://qianfan.baidubce.com/anthropic/coding/v1/messages", want: "https://qianfan.baidubce.com/anthropic/coding/v1/messages"},
+		{name: "Qianfan OpenAI base URL", input: "https://qianfan.baidubce.com/v2/coding", want: "https://qianfan.baidubce.com/v2/coding"},
+		{name: "Qianfan Anthropic base URL", input: "https://qianfan.baidubce.com/anthropic/coding", want: "https://qianfan.baidubce.com/anthropic/coding"},
 	}
 
 	for _, tt := range tests {

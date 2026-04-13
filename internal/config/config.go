@@ -23,6 +23,14 @@ type Config struct {
 	RealModels       bool              `toml:"real_models"`
 	LogLevel         string            `toml:"log_level"` // trace|debug|info|warn|error (default: info)
 	LogBody          bool              `toml:"log_body"`  // print full request/response bodies at trace level
+
+	// upstreamOpenAIURL holds the full OpenAI endpoint URL when the user supplies one
+	// (e.g. https://qianfan.baidubce.com/v2/coding/chat/completions).
+	// Empty string means "derive from Upstream base + api path".
+	upstreamOpenAIURL string
+	// upstreamAnthropicURL holds the full Anthropic endpoint URL when the user supplies one
+	// (e.g. https://qianfan.baidubce.com/anthropic/coding/v1/messages).
+	upstreamAnthropicURL string
 }
 
 func DefaultConfig() *Config {
@@ -106,6 +114,8 @@ func Load(path string, overrides map[string]string) (*Config, error) {
 		return nil, fmt.Errorf("invalid log_level %q (must be trace/debug/info/warn/error)", cfg.LogLevel)
 	}
 
+	cfg.parseUpstreamURL()
+
 	return cfg, nil
 }
 
@@ -141,4 +151,39 @@ func (c *Config) ModelIDs() []string {
 		}
 	}
 	return ids
+}
+
+// parseUpstreamURL inspects cfg.Upstream for a full endpoint URL suffix.
+// When a known suffix is found, it is stored in the corresponding private field
+// and Upstream is trimmed to the base URL.
+// Supported suffixes:
+//   - /chat/completions   → OpenAI full URL (e.g. Qianfan /v2/coding/chat/completions)
+//   - /v1/chat/completions → OpenAI standard full URL
+//   - /v1/messages        → Anthropic full URL
+func (c *Config) parseUpstreamURL() {
+	raw := strings.TrimRight(c.Upstream, "/")
+	switch {
+	case strings.HasSuffix(raw, "/chat/completions"):
+		c.upstreamOpenAIURL = raw
+		c.Upstream = strings.TrimSuffix(raw, "/chat/completions")
+	case strings.HasSuffix(raw, "/v1/messages"):
+		c.upstreamAnthropicURL = raw
+		c.Upstream = strings.TrimSuffix(raw, "/v1/messages")
+	}
+	// No suffix match: Upstream stays as-is (base URL), private fields remain "".
+}
+
+// ResolveUpstreamURL returns the full request URL for the given API path.
+// apiPath is the internal path such as "/v1/messages" or "/v1/chat/completions".
+// When the user supplied a full endpoint URL for the matching protocol, that URL
+// is returned directly (ignoring apiPath). Otherwise the base Upstream is concatenated
+// with apiPath, preserving existing behaviour for all non-Qianfan upstreams.
+func (c *Config) ResolveUpstreamURL(apiPath string) string {
+	if strings.Contains(apiPath, "/messages") && c.upstreamAnthropicURL != "" {
+		return c.upstreamAnthropicURL
+	}
+	if strings.Contains(apiPath, "/chat/completions") && c.upstreamOpenAIURL != "" {
+		return c.upstreamOpenAIURL
+	}
+	return c.Upstream + apiPath
 }
