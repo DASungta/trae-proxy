@@ -153,6 +153,27 @@ func TestResolveUpstreamURL(t *testing.T) {
 			wantURL:  "https://qianfan.baidubce.com/anthropic/coding/v1/chat/completions",
 			wantBase: "https://qianfan.baidubce.com/anthropic/coding",
 		},
+		{
+			name:     "trailing slash is normalized",
+			upstream: "https://api.example.com/",
+			apiPath:  "/v1/messages",
+			wantURL:  "https://api.example.com/v1/messages",
+			wantBase: "https://api.example.com",
+		},
+		{
+			name:     "/v1/ suffix: chat/completions path",
+			upstream: "https://coding.dashscope.aliyuncs.com/v1/",
+			apiPath:  "/v1/chat/completions",
+			wantURL:  "https://coding.dashscope.aliyuncs.com/v1/chat/completions",
+			wantBase: "https://coding.dashscope.aliyuncs.com",
+		},
+		{
+			name:     "/v1/ suffix: messages path",
+			upstream: "https://coding.dashscope.aliyuncs.com/v1/",
+			apiPath:  "/v1/messages",
+			wantURL:  "https://coding.dashscope.aliyuncs.com/v1/messages",
+			wantBase: "https://coding.dashscope.aliyuncs.com",
+		},
 	}
 
 	for _, tt := range tests {

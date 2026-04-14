@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.2] - 2026-04-14
+
+### Bug Fixes
+
+- **修复 upstream 尾部斜线导致双斜线 404**：配置 `https://host/` 时，`parseUpstreamURL` 未将归一化后的地址写回 `cfg.Upstream`，拼接请求路径后产生 `//` 双斜线，上游返回 404。现已在 `default` 分支补充 `c.Upstream = raw`。
+
+### Features
+
+- **自动识别 `/v1/` 后缀**：upstream 填写 `https://host/v1/` 时，自动剥离末尾 `/v1`，避免拼出 `/v1/v1/messages` 或 `/v1/v1/chat/completions`。
+- **Info 日志新增 `upstream_url` 字段**：每条请求完成日志现在打印实际转发的完整 URL，方便排查上游地址配置问题。
+
+---
+
 ## [v0.3.1] - 2026-04-14
 
 ### Features

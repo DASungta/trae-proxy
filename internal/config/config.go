@@ -169,8 +169,12 @@ func (c *Config) parseUpstreamURL() {
 	case strings.HasSuffix(raw, "/v1/messages"):
 		c.upstreamAnthropicURL = raw
 		c.Upstream = strings.TrimSuffix(raw, "/v1/messages")
+	case strings.HasSuffix(raw, "/v1"):
+		// User provided e.g. "https://host/v1/" — strip /v1 since apiPath already includes it.
+		c.Upstream = strings.TrimSuffix(raw, "/v1")
+	default:
+		c.Upstream = raw // normalize: strip trailing slash
 	}
-	// No suffix match: Upstream stays as-is (base URL), private fields remain "".
 }
 
 // ResolveUpstreamURL returns the full request URL for the given API path.
