@@ -38,13 +38,15 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		var (
-			status   int = 200
-			bytesOut int64
+			status      int = 200
+			bytesOut    int64
+			upstreamURL string
 		)
 		defer func() {
 			logger.Info("request done",
 				"method", r.Method,
 				"path", r.URL.Path,
+				"upstream_url", upstreamURL,
 				"status", status,
 				"dur_ms", time.Since(start).Milliseconds(),
 				"bytes_out", bytesOut,
@@ -89,13 +91,12 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 			}
 		}
 
-		var url string
 		if strings.HasSuffix(upstreamPath, "/chat/completions") {
-			url = cfg.ResolveUpstreamURL(upstreamPath)
+			upstreamURL = cfg.ResolveUpstreamURL(upstreamPath)
 		} else {
-			url = cfg.Upstream + upstreamPath
+			upstreamURL = cfg.Upstream + upstreamPath
 		}
-		req, err := http.NewRequestWithContext(r.Context(), r.Method, url, strings.NewReader(string(body)))
+		req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, strings.NewReader(string(body)))
 		if err != nil {
 			status = http.StatusBadGateway
 			sendProxyError(w, http.StatusBadGateway, fmt.Sprintf("failed to create request: %v", err))
@@ -110,7 +111,7 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 
 		// Tap 3: upstream request.
 		logger.Trace("upstream request",
-			"url", url,
+			"url", upstreamURL,
 			"method", r.Method,
 			"headers", logging.RedactHeaders(req.Header),
 			"body_size", len(body),

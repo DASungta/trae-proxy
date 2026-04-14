@@ -30,13 +30,15 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		var (
-			status   int = 200
-			bytesOut int64
+			status      int = 200
+			bytesOut    int64
+			upstreamURL string
 		)
 		defer func() {
 			logger.Info("request done",
 				"method", r.Method,
 				"path", r.URL.Path,
+				"upstream_url", upstreamURL,
 				"status", status,
 				"dur_ms", time.Since(start).Milliseconds(),
 				"bytes_out", bytesOut,
@@ -89,8 +91,8 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 
 		upstreamBody, _ := json.Marshal(anthropicReq)
 
-		url := cfg.ResolveUpstreamURL("/v1/messages")
-		req, err := http.NewRequestWithContext(r.Context(), "POST", url, strings.NewReader(string(upstreamBody)))
+		upstreamURL = cfg.ResolveUpstreamURL("/v1/messages")
+		req, err := http.NewRequestWithContext(r.Context(), "POST", upstreamURL, strings.NewReader(string(upstreamBody)))
 		if err != nil {
 			status = http.StatusBadGateway
 			sendProxyError(w, http.StatusBadGateway, fmt.Sprintf("failed to create request: %v", err))
@@ -114,7 +116,7 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 
 		// Tap 3: upstream request payload.
 		logger.Trace("upstream request",
-			"url", url,
+			"url", upstreamURL,
 			"headers", logging.RedactHeaders(req.Header),
 			"body_size", len(upstreamBody),
 			"body", bodyAttr(logger, upstreamBody),
