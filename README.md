@@ -16,6 +16,8 @@
 ## 快速开始
 
 > mac/Linux用户？看这里：[快速开始指南 →](docs/quick-start.md)
+>
+> window用户？**往下翻↓**
 
 ## 更新计划
 
