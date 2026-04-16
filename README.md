@@ -146,7 +146,7 @@ sudo trae-proxy init
 - 安装好 Trae，国内海外任意
 - 设置 → 模型 → 添加模型
 - 工具默认配置是劫持 OpenRouter，所以服务商选择 OpenRouter
-- 模型选择第一个即可，Anthropic: Claude Sonnet 4.5 *(选择在配置文件中配置的对应模型)*
+- 模型选择第一个即可，Anthropic: Claude Sonnet 4.6 *(选择在配置文件中配置的对应模型)*
 - **关键**：填入你上游服务的 API 密钥
 - 添加模型，Trae 在这一步不会校验。稍等片刻就会在自定义模型列表中出现了。
 
@@ -262,7 +262,7 @@ sudo trae-proxy uninstall -y
 配置文件路径：`~/.config/trae-proxy/config.toml`
 
 ```toml
-# 上游 API 地址（路径不要包含 /v1/messages 或 /v1/chat/completions）
+# 上游 API 地址（路径兼容完整地址或基地址）
 # 支持任意兼容 Anthropic Messages API 或 OpenAI Chat Completions 的端点，例如：
 #   中转站：  http://your-relay-server:8080（sub2api、one-api、new-api 等直接填端点地址）
 #   移动云：  https://ai.bayesdl.com/api/maas/
@@ -294,18 +294,17 @@ hijack = "openrouter.ai"
 # 三级回退：① 精确匹配 → ② 去掉 "anthropic/"/"openai/" 等前缀 → ③ 原样透传
 # 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
-"anthropic/claude-opus-4.1" = "claude-opus-4.6"
-"anthropic/claude-4-sonnet" = ""
-"anthropic/claude-4-opus" = ""
-"anthropic/claude-3.7-sonnet" = ""
-"openai/gpt-5" = "gpt-5.4"
-"openai/gpt-4.1" = ""
-"openai/gpt-4o" = ""
-"google/gemini-3-pro-perview" = ""
-"google/gemini-2.5-pro" = ""
-"minimax/minimax-m2" = ""
-"qwen/qwen3-coder" = ""
+"anthropic/claude-sonnet-4.6" = "claude-sonnet-4.6"
+"anthropic/claude-opus-4.6" = "claude-opus-4.6"
+"anthropic/claude-haiku-4.5" = ""
+"openai/gpt-oss-120b" = "gpt-5.4"
+"openai/gpt-5.4" = ""
+"openai/gpt-5.4-mini" = ""
+"google/gemini-3.1-pro-preview" = ""
+"google/gemini-3.1-flash-lite-preview" = ""
+"minimax/minimax-m2.7" = ""
+"qwen/qwen3-coder-next" = ""
+"z-ai/glm-5" = ""
 ```
 
 ### 日志
