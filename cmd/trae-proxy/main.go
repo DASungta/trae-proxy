@@ -288,24 +288,7 @@ func uninstallCmd() *cobra.Command {
 
 			if pid443 := findPort443Process(); pid443 > 0 {
 				fmt.Printf("[uninstall] 检测到 PID %d 仍占用 443 端口，尝试终止...\n", pid443)
-				if err := syscall.Kill(pid443, syscall.SIGTERM); err == nil {
-					time.Sleep(500 * time.Millisecond)
-					if findPort443Process() > 0 {
-						fmt.Printf("[uninstall] 进程未退出，强制终止...\n")
-						if runtime.GOOS == "darwin" {
-							_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid443))
-						} else {
-							_ = syscall.Kill(pid443, syscall.SIGKILL)
-						}
-					}
-				} else {
-					fmt.Printf("[uninstall] SIGTERM 失败，尝试强制终止...\n")
-					if runtime.GOOS == "darwin" {
-						_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid443))
-					} else {
-						_ = syscall.Kill(pid443, syscall.SIGKILL)
-					}
-				}
+				killProcess(pid443)
 			}
 
 			dir, _ := config.ConfigDir()
@@ -674,6 +657,25 @@ func colorStatusLine(line string, level colorLevel, enabled bool) string {
 }
 
 // findPort443Process returns PID of a process named "trae-proxy" listening on :443, or 0 if none.
+func killProcess(pid int) {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	if err := proc.Signal(syscall.SIGTERM); err == nil {
+		time.Sleep(500 * time.Millisecond)
+		if findPort443Process() == 0 {
+			return
+		}
+	}
+	fmt.Printf("[uninstall] 进程未退出，强制终止...\n")
+	if runtime.GOOS == "darwin" {
+		_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid))
+	} else {
+		_ = proc.Kill()
+	}
+}
+
 func findPort443Process() int {
 	if runtime.GOOS == "windows" {
 		return 0
