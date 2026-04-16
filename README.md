@@ -19,6 +19,13 @@
 >
 > window用户？**往下翻↓**
 
+**注意：一定要在trae-proxy没有start的时候，在Trae添加模型、编辑模型，不然会一直提示错误的模型名称！！**
+
+**注意：一定要在trae-proxy没有start的时候，在Trae添加模型、编辑模型，不然会一直提示错误的模型名称！！**
+
+**注意：一定要在trae-proxy没有start的时候，在Trae添加模型、编辑模型，不然会一直提示错误的模型名称！！**
+
+
 ## 更新计划
 
 - [x] 支持OpenAI Chat Completions
