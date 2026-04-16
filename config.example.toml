@@ -1,7 +1,7 @@
 # trae-proxy configuration
 
 # Upstream API address
-# 上游服务地址，路径不要包含/v1/messages或/v1/chat/completions
+# 上游服务地址，路径支持完整地址或基地址
 # 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
 # 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
 # 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
@@ -29,15 +29,14 @@ hijack = "openrouter.ai"
 # 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
 # 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
-"anthropic/claude-opus-4.1" = "claude-opus-4.6"
-"anthropic/claude-4-sonnet" = ""
-"anthropic/claude-4-opus" = ""
-"anthropic/claude-3.7-sonnet" = ""
-"openai/gpt-5" = "gpt-5.4"
-"openai/gpt-4.1" = ""
-"openai/gpt-4o" = ""
-"google/gemini-3-pro-perview" = ""
-"google/gemini-2.5-pro" = ""
-"minimax/minimax-m2" = ""
-"qwen/qwen3-coder" = ""
+"anthropic/claude-sonnet-4.6" = "claude-sonnet-4.6"
+"anthropic/claude-opus-4.6" = "claude-opus-4.6"
+"anthropic/claude-haiku-4.5" = ""
+"openai/gpt-oss-120b" = "gpt-5.4"
+"openai/gpt-5.4" = ""
+"openai/gpt-5.4-mini" = ""
+"google/gemini-3.1-pro-preview" = ""
+"google/gemini-3.1-flash-lite-preview" = ""
+"minimax/minimax-m2.7" = ""
+"qwen/qwen3-coder-next" = ""
+"z-ai/glm-5" = ""
