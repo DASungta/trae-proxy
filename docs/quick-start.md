@@ -16,7 +16,7 @@
 ## 第一步：安装 trae-proxy
 
 ```bash
-# curl -fsSL https://raw.githubusercontent.com/.../install.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh | sudo bash
 ```
 
 ![安装命令](./pics/t1.png)
