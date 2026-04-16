@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -295,15 +296,23 @@ func uninstallCmd() *cobra.Command {
 			caDir := filepath.Join(dir, "ca")
 
 			caCertPath := filepath.Join(caDir, "root-ca.pem")
-			if _, err := os.Stat(caCertPath); err == nil {
-				fmt.Println("[uninstall] removing CA from system trust store...")
-				if err := tlsutil.UninstallCA(caCertPath); err != nil {
+
+			if runtime.GOOS == "darwin" {
+				// Combine CA removal + hosts cleanup into a single privileged call.
+				if err := darwinUninstallPrivileged(caCertPath); err != nil {
 					fmt.Printf("[uninstall] WARNING: %v\n", err)
 				}
-			}
+			} else {
+				if _, err := os.Stat(caCertPath); err == nil {
+					fmt.Println("[uninstall] removing CA from system trust store...")
+					if err := tlsutil.UninstallCA(caCertPath); err != nil {
+						fmt.Printf("[uninstall] WARNING: %v\n", err)
+					}
+				}
 
-			fmt.Println("[uninstall] removing hosts entry...")
-			hosts.Remove()
+				fmt.Println("[uninstall] removing hosts entry...")
+				hosts.Remove()
+			}
 
 			// Remove the binary itself.
 			exePath, err := os.Executable()
@@ -566,7 +575,11 @@ func runProxy(opts startOptions) error {
 	if err := hosts.Add(cfg.Hijack); err != nil {
 		return fmt.Errorf("add hosts: %w", err)
 	}
-	defer hosts.Remove() // ensure cleanup on any exit (panic, fatal, etc.)
+	var removeOnce sync.Once
+	cleanupHosts := func() {
+		removeOnce.Do(func() { hosts.Remove() })
+	}
+	defer cleanupHosts()
 
 	tlsCfg, err := tlsutil.LoadServerTLSConfig(caDir)
 	if err != nil {
@@ -590,7 +603,7 @@ func runProxy(opts startOptions) error {
 	go func() {
 		<-sigCh
 		fmt.Println("\n[trae-proxy] shutting down...")
-		hosts.Remove()
+		cleanupHosts()
 		cancel()
 	}()
 
@@ -674,6 +687,49 @@ func killProcess(pid int) {
 	} else {
 		_ = proc.Kill()
 	}
+}
+
+func darwinUninstallPrivileged(caCertPath string) error {
+	var cmds []string
+
+	if _, err := os.Stat(caCertPath); err == nil {
+		fmt.Println("[uninstall] removing CA from system trust store...")
+		cmds = append(cmds, fmt.Sprintf("security remove-trusted-cert -d %s",
+			shellQuote(caCertPath)))
+	}
+
+	data, err := os.ReadFile(hosts.HostsPath())
+	if err == nil {
+		var filtered []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if !strings.Contains(line, "# trae-proxy") {
+				filtered = append(filtered, line)
+			}
+		}
+		content := strings.Join(filtered, "\n")
+
+		tmpFile, err := os.CreateTemp("", "trae-proxy-hosts-*")
+		if err == nil {
+			tmpPath := tmpFile.Name()
+			tmpFile.WriteString(content)
+			tmpFile.Close()
+			defer os.Remove(tmpPath)
+
+			fmt.Println("[uninstall] removing hosts entry...")
+			cmds = append(cmds,
+				fmt.Sprintf("cat %s > %s && rm -f %s && dscacheutil -flushcache && killall -HUP mDNSResponder",
+					shellQuote(tmpPath), shellQuote(hosts.HostsPath()), shellQuote(tmpPath)))
+		}
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+	return privilege.RunPrivileged(strings.Join(cmds, " && "))
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func findPort443Process() int {

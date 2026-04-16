@@ -6,26 +6,19 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
 	survey "github.com/AlecAivazis/survey/v2"
+
+	"github.com/zhangyc/trae-proxy/internal/config"
 )
 
-// openRouterModels lists the models Trae currently exposes via OpenRouter.
-var openRouterModels = []string{
-	"anthropic/claude-sonnet-4.5",
-	"anthropic/claude-opus-4.1",
-	"anthropic/claude-4-sonnet",
-	"anthropic/claude-4-opus",
-	"anthropic/claude-3.7-sonnet",
-	"openai/gpt-5",
-	"openai/gpt-4.1",
-	"openai/gpt-4o",
-	"google/gemini-3-pro-perview",
-	"google/gemini-2.5-pro",
-	"minimax/minimax-m2",
-	"qwen/qwen3-coder",
+func openRouterModels() []string {
+	models := config.DefaultConfig().ModelIDs()
+	sort.Strings(models)
+	return models
 }
 
 // validateUpstreamURL validates and normalises an upstream URL.
@@ -114,12 +107,13 @@ func promptProtocol(scanner *bufio.Scanner, out io.Writer) (string, error) {
 }
 
 func promptModel(scanner *bufio.Scanner, out io.Writer) (string, error) {
+	models := openRouterModels()
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "--- Step 3/3: 模型映射 ---")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "在 Trae 中选择以下任一模型时，请求会被映射到你指定的上游模型。")
 	fmt.Fprintln(out)
-	for i, m := range openRouterModels {
+	for i, m := range models {
 		fmt.Fprintf(out, "  %2d) %s\n", i+1, m)
 	}
 	fmt.Fprintln(out)
@@ -131,14 +125,14 @@ func promptModel(scanner *bufio.Scanner, out io.Writer) (string, error) {
 		}
 		input := strings.TrimSpace(scanner.Text())
 		if input == "" {
-			return openRouterModels[0], nil
+			return models[0], nil
 		}
 		n, err := strconv.Atoi(input)
-		if err != nil || n < 1 || n > len(openRouterModels) {
-			fmt.Fprintf(out, "  ✗ 请输入 1-%d 之间的数字\n", len(openRouterModels))
+		if err != nil || n < 1 || n > len(models) {
+			fmt.Fprintf(out, "  ✗ 请输入 1-%d 之间的数字\n", len(models))
 			continue
 		}
-		return openRouterModels[n-1], nil
+		return models[n-1], nil
 	}
 }
 
@@ -208,7 +202,18 @@ log_body = false
 # 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
 `)
-	for _, m := range openRouterModels {
+	models := openRouterModels()
+	customModel := true
+	for _, m := range models {
+		if m == selectedModel {
+			customModel = false
+			break
+		}
+	}
+	if customModel {
+		fmt.Fprintf(&b, "%q = %q\n", selectedModel, upstreamModel)
+	}
+	for _, m := range models {
 		if m == selectedModel {
 			fmt.Fprintf(&b, "%q = %q\n", m, upstreamModel)
 		} else {
@@ -274,6 +279,23 @@ func runWizardBufio(configPath string, in io.Reader, out io.Writer) error {
 func runWizardSurvey() (string, string, string, string, error) {
 	askOpts := []survey.AskOpt{survey.WithStdio(os.Stdin, os.Stdout, os.Stderr)}
 
+	fmt.Println("=== trae-proxy 初始化向导 ===")
+	fmt.Println()
+
+	// Step 1: upstream URL
+	fmt.Println("--- Step 1/4: 上游服务地址 ---")
+	fmt.Println()
+	fmt.Println("请输入上游 API 地址（基础地址或完整端点 URL 均可）")
+	fmt.Println()
+	fmt.Println("示例：")
+	fmt.Println("  移动云:                https://ai.bayesdl.com/api/maas/")
+	fmt.Println("  京东云(OpenAI):         https://modelservice.jdcloud.com/coding/openai")
+	fmt.Println("  京东云(Anthropic):      https://modelservice.jdcloud.com/coding/anthropic")
+	fmt.Println("  百度千帆(OpenAI):       https://qianfan.baidubce.com/v2/coding")
+	fmt.Println("  百度千帆(Anthropic):    https://qianfan.baidubce.com/anthropic/coding")
+	fmt.Println("  sub2api:               http://your-server:8080")
+	fmt.Println()
+
 	upstream := ""
 	if err := survey.AskOne(
 		&survey.Input{Message: "上游地址:"},
@@ -292,6 +314,16 @@ func runWizardSurvey() (string, string, string, string, error) {
 		return "", "", "", "", err
 	}
 
+	// Step 2: protocol
+	fmt.Println()
+	fmt.Println("--- Step 2/4: 上游协议 ---")
+	fmt.Println()
+	fmt.Println("  anthropic — 上游接受 Anthropic Messages API，trae-proxy 自动转换格式")
+	fmt.Println("              适用于：原生 Anthropic 端点、部分云服务商")
+	fmt.Println("  openai    — 上游接受 OpenAI Chat Completions API，直接转发（仅重写模型名）")
+	fmt.Println("              适用于：中转站、LM Studio、Ollama")
+	fmt.Println()
+
 	protocolSelection := ""
 	if err := survey.AskOne(
 		&survey.Select{
@@ -309,13 +341,23 @@ func runWizardSurvey() (string, string, string, string, error) {
 	}
 	protocol := strings.TrimSpace(strings.SplitN(protocolSelection, " ", 2)[0])
 
-	modelOptions := append(append([]string{}, openRouterModels...), "[自定义输入...]")
+	// Step 3: model selection
+	fmt.Println()
+	fmt.Println("--- Step 3/4: 模型映射 ---")
+	fmt.Println()
+	fmt.Println("在 Trae 中选择以下任一模型时，请求会被映射到你指定的上游模型。")
+	fmt.Println("支持输入关键字过滤，选择 [自定义输入...] 可填写任意模型名。")
+	fmt.Println()
+
+	models := openRouterModels()
+	modelOptions := append(append([]string{}, models...), "[自定义输入...]")
 	selectedModel := ""
 	if err := survey.AskOne(
 		&survey.Select{
-			Message: "选择模型:",
-			Options: modelOptions,
-			Default: openRouterModels[0],
+			Message:  "选择模型:",
+			Options:  modelOptions,
+			Default:  models[0],
+			PageSize: len(modelOptions),
 			Filter: func(filter string, value string, index int) bool {
 				filter = strings.ToLower(strings.TrimSpace(filter))
 				if filter == "" {
@@ -345,6 +387,14 @@ func runWizardSurvey() (string, string, string, string, error) {
 		}
 		selectedModel = strings.TrimSpace(selectedModel)
 	}
+
+	// Step 4: upstream model name
+	fmt.Println()
+	fmt.Println("--- Step 4/4: 上游模型名 ---")
+	fmt.Println()
+	fmt.Printf("当 Trae 请求 %s 时，将发送此名称给上游。\n", selectedModel)
+	fmt.Println("例如: claude-sonnet-4-6, gpt-4o, glm-4-plus")
+	fmt.Println()
 
 	upstreamModel := ""
 	if err := survey.AskOne(

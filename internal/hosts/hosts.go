@@ -55,11 +55,11 @@ func Add(domain string) error {
 	}
 
 	if runtime.GOOS == "darwin" {
-		script := fmt.Sprintf("printf '%%s' %s | tee -a %s > /dev/null", shellQuote(line), shellQuote(HostsPath()))
+		script := fmt.Sprintf("printf '%%s' %s | tee -a %s > /dev/null && dscacheutil -flushcache && killall -HUP mDNSResponder",
+			shellQuote(line), shellQuote(HostsPath()))
 		if err := privilege.RunPrivileged(script); err != nil {
 			return fmt.Errorf("add hosts entry: %w", err)
 		}
-		flushDNSCache()
 		return nil
 	}
 
@@ -110,11 +110,11 @@ func Remove() error {
 		}
 		defer os.Remove(tmpPath)
 
-		script := fmt.Sprintf("cat %s > %s && rm -f %s", shellQuote(tmpPath), shellQuote(HostsPath()), shellQuote(tmpPath))
+		script := fmt.Sprintf("cat %s > %s && rm -f %s && dscacheutil -flushcache && killall -HUP mDNSResponder",
+			shellQuote(tmpPath), shellQuote(HostsPath()), shellQuote(tmpPath))
 		if err := privilege.RunPrivileged(script); err != nil {
 			return fmt.Errorf("remove hosts entry: %w", err)
 		}
-		flushDNSCache()
 		return nil
 	}
 

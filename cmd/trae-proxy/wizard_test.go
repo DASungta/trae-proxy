@@ -123,32 +123,34 @@ func TestPromptModel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != openRouterModels[0] {
-			t.Fatalf("got %q, want %q", got, openRouterModels[0])
+		if got != openRouterModels()[0] {
+			t.Fatalf("got %q, want %q", got, openRouterModels()[0])
 		}
 	})
 
 	t.Run("select number", func(t *testing.T) {
+		models := openRouterModels()
 		scanner := newTestScanner(strings.NewReader("6\n"))
 		var out bytes.Buffer
 		got, err := promptModel(scanner, &out)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != "openai/gpt-5" {
-			t.Fatalf("got %q, want %q", got, "openai/gpt-5")
+		if got != models[5] {
+			t.Fatalf("got %q, want %q", got, models[5])
 		}
 	})
 
 	t.Run("out of range then valid", func(t *testing.T) {
+		models := openRouterModels()
 		scanner := newTestScanner(strings.NewReader("99\n3\n"))
 		var out bytes.Buffer
 		got, err := promptModel(scanner, &out)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != "anthropic/claude-4-sonnet" {
-			t.Fatalf("got %q, want %q", got, "anthropic/claude-4-sonnet")
+		if got != models[2] {
+			t.Fatalf("got %q, want %q", got, models[2])
 		}
 	})
 }
@@ -183,7 +185,7 @@ func TestWriteWizardConfig(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 
-	err := writeWizardConfig(path, "https://api.example.com", "openai", "openai/gpt-5", "gpt-4o")
+	err := writeWizardConfig(path, "https://api.example.com", "openai", "openai/gpt-5.4", "gpt-4o")
 	if err != nil {
 		t.Fatalf("writeWizardConfig: %v", err)
 	}
@@ -217,15 +219,15 @@ func TestWriteWizardConfig(t *testing.T) {
 	if parsed.Hijack != "openrouter.ai" {
 		t.Errorf("hijack = %q, want %q", parsed.Hijack, "openrouter.ai")
 	}
-	if parsed.Models["openai/gpt-5"] != "gpt-4o" {
-		t.Errorf("models[openai/gpt-5] = %q, want %q", parsed.Models["openai/gpt-5"], "gpt-4o")
+	if parsed.Models["openai/gpt-5.4"] != "gpt-4o" {
+		t.Errorf("models[openai/gpt-5.4] = %q, want %q", parsed.Models["openai/gpt-5.4"], "gpt-4o")
 	}
 	// Other models should be empty string.
-	if parsed.Models["anthropic/claude-sonnet-4.5"] != "" {
-		t.Errorf("models[anthropic/claude-sonnet-4.5] = %q, want empty", parsed.Models["anthropic/claude-sonnet-4.5"])
+	if parsed.Models["anthropic/claude-sonnet-4.6"] != "" {
+		t.Errorf("models[anthropic/claude-sonnet-4.6] = %q, want empty", parsed.Models["anthropic/claude-sonnet-4.6"])
 	}
-	if len(parsed.Models) != len(openRouterModels) {
-		t.Errorf("model count = %d, want %d", len(parsed.Models), len(openRouterModels))
+	if len(parsed.Models) != len(openRouterModels()) {
+		t.Errorf("model count = %d, want %d", len(parsed.Models), len(openRouterModels()))
 	}
 }
 
@@ -234,6 +236,7 @@ func TestRunWizardE2E(t *testing.T) {
 	configPath := filepath.Join(dir, "config.toml")
 
 	// Simulate: upstream URL, protocol (default), model 1 (default), upstream model name.
+	firstModel := openRouterModels()[0]
 	input := "https://api.example.com\n\n\nclaude-sonnet-4-6\n"
 	var out bytes.Buffer
 
@@ -269,8 +272,8 @@ func TestRunWizardE2E(t *testing.T) {
 	if parsed.UpstreamProtocol != "anthropic" {
 		t.Errorf("upstream_protocol = %q", parsed.UpstreamProtocol)
 	}
-	if parsed.Models["anthropic/claude-sonnet-4.5"] != "claude-sonnet-4-6" {
-		t.Errorf("models mapping = %q", parsed.Models["anthropic/claude-sonnet-4.5"])
+	if parsed.Models[firstModel] != "claude-sonnet-4-6" {
+		t.Errorf("models[%s] = %q, want %q", firstModel, parsed.Models[firstModel], "claude-sonnet-4-6")
 	}
 }
 
