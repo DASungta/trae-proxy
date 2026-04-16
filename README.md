@@ -24,7 +24,7 @@
 
 > macOS / Linux 用户？[1 分钟快速开始 →](docs/quick-start.md)
 >
-> Windows 用户？**往下看 ↓**
+> Windows 用户？[2 分钟快速开始 →](docs/win-quick-start.md)
 
 新版本已经解除限制！~~**注意：一定要在 trae-proxy 没有 start 的时候，在 Trae 添加模型、编辑模型，否则会一直提示错误的模型名称！**~~ 
 

@@ -30,7 +30,7 @@
 运行交互式向导，一次性完成：
 
 ```bash
-sudo trae-proxy init
+trae-proxy init
 ```
 
 填写上游服务地址（你的中转站/云服务 API URL）
@@ -53,7 +53,21 @@ sudo trae-proxy init
 
 ---
 
-## 第三步：在 Trae 中添加模型
+## 第三步：启动代理
+
+```bash
+# 推荐：后台守护进程模式
+trae-proxy start -d
+
+# 查看运行状态
+trae-proxy status
+```
+
+![启动代理](./pics/t9.png)
+
+---
+
+## 第四步：在 Trae 中添加模型
 
 打开 Trae，进入 **设置 → 模型 → 添加模型 → 服务商选择OpenRouter**
 
@@ -66,20 +80,6 @@ sudo trae-proxy init
 添加后，可以在自定义模型列表中查看
 
 ![添加模型-列表](./pics/t8.png)
-
----
-
-## 第四步：启动代理
-
-```bash
-# 推荐：后台守护进程模式
-sudo trae-proxy start -d
-
-# 查看运行状态
-sudo trae-proxy status
-```
-
-![启动代理](./pics/t9.png)
 
 ---
 
@@ -105,14 +105,14 @@ tail -f ~/.config/trae-proxy/trae-proxy.log
 
 ## 常用操作速查
 
-| 操作     | 命令                          |
-|--------|-----------------------------|
-| 启动（后台） | `sudo trae-proxy start -d`  |
-| 停止     | `sudo trae-proxy stop`      |
-| 重启     | `sudo trae-proxy restart`   |
-| 查看状态   | `trae-proxy status`         |
-| 更新到最新版 | `sudo trae-proxy update`    |
-| 卸载并清理  | `sudo trae-proxy uninstall` |
+| 操作     | 命令                  |
+|--------|---------------------|
+| 启动（后台） | `trae-proxy start -d` |
+| 停止     | `trae-proxy stop`   |
+| 重启     | `trae-proxy restart` |
+| 查看状态   | `trae-proxy status` |
+| 更新到最新版 | `trae-proxy update` |
+| 卸载并清理  | `trae-proxy uninstall` |
 
 ---
 
@@ -123,12 +123,12 @@ tail -f ~/.config/trae-proxy/trae-proxy.log
 重新运行初始化，确认证书安装步骤成功：
 
 ```bash
-sudo trae-proxy init
+trae-proxy init
 ```
 
 **Trae 连接失败**
 
-1. 确认代理正在运行：`sudo trae-proxy status`
+1. 确认代理正在运行：`trae-proxy status`
 2. 查看日志排查错误：`tail -50 ~/.config/trae-proxy/trae-proxy.log`
 3. 确认上游服务地址可访问
 
