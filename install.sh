@@ -124,8 +124,8 @@ main() {
     echo "✅ trae-proxy ${VERSION} 已安装到 ${INSTALL_DIR}/${BINARY_NAME}"
     echo ""
     echo "下一步："
-    echo "  sudo trae-proxy init       # 首次使用：生成证书并安装到系统信任库"
-    echo "  sudo trae-proxy start -d   # 启动代理（后台运行）"
+    echo "  trae-proxy init       # 首次使用：生成证书并安装到系统信任库"
+    echo "  trae-proxy start -d   # 启动代理（后台运行）"
     echo "  trae-proxy status          # 查看运行状态"
     echo ""
 }
