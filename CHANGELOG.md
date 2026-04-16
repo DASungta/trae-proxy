@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.3.3] - 2026-04-16
+
+### Improvements
+
+- **同步 Trae 最新模型列表**：更新默认模型映射表，与 Trae IDE 当前 OpenRouter 模型列表保持一致。
+  - 新增/更新 Anthropic 模型：`anthropic/claude-sonnet-4.6`、`anthropic/claude-opus-4.6`、`anthropic/claude-haiku-4.5`
+  - 新增/更新 OpenAI 模型：`openai/gpt-oss-120b`、`openai/gpt-5.4`、`openai/gpt-5.4-mini`
+  - 新增 Google 模型：`google/gemini-3.1-pro-preview`、`google/gemini-3.1-flash-lite-preview`
+  - 新增 MiniMax 模型：`minimax/minimax-m2.7`
+  - 新增 Qwen 模型：`qwen/qwen3-coder-next`
+  - 新增智谱 AI 模型：`z-ai/glm-5`
+- **upstream 配置说明更新**：注释说明 upstream 同时支持基础地址和完整端点 URL。
+
+---
+
 ## [v0.3.2] - 2026-04-14
 
 ### Bug Fixes
