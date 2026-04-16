@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	survey "github.com/AlecAivazis/survey/v2"
 )
 
 // openRouterModels lists the models Trae currently exposes via OpenRouter.
@@ -226,6 +228,20 @@ func isTerminal(f *os.File) bool {
 }
 
 func runWizard(configPath string, in io.Reader, out io.Writer) error {
+	stdinFile, ok := in.(*os.File)
+	if !ok || stdinFile != os.Stdin || !isTerminal(os.Stdin) {
+		return runWizardBufio(configPath, in, out)
+	}
+
+	upstream, protocol, selectedModel, upstreamModel, err := runWizardSurvey()
+	if err != nil {
+		return err
+	}
+
+	return finishWizard(configPath, out, upstream, protocol, selectedModel, upstreamModel)
+}
+
+func runWizardBufio(configPath string, in io.Reader, out io.Writer) error {
 	scanner := bufio.NewScanner(in)
 
 	fmt.Fprintln(out, "=== trae-proxy 初始化向导 ===")
@@ -251,6 +267,103 @@ func runWizard(configPath string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+
+	return finishWizard(configPath, out, upstream, protocol, selectedModel, upstreamModel)
+}
+
+func runWizardSurvey() (string, string, string, string, error) {
+	askOpts := []survey.AskOpt{survey.WithStdio(os.Stdin, os.Stdout, os.Stderr)}
+
+	upstream := ""
+	if err := survey.AskOne(
+		&survey.Input{Message: "上游地址:"},
+		&upstream,
+		append(askOpts, survey.WithValidator(func(ans interface{}) error {
+			raw, _ := ans.(string)
+			_, err := validateUpstreamURL(raw)
+			return err
+		}))...,
+	); err != nil {
+		return "", "", "", "", err
+	}
+	var err error
+	upstream, err = validateUpstreamURL(upstream)
+	if err != nil {
+		return "", "", "", "", err
+	}
+
+	protocolSelection := ""
+	if err := survey.AskOne(
+		&survey.Select{
+			Message: "上游协议:",
+			Options: []string{
+				"anthropic — 自动转换 OpenAI→Anthropic 格式",
+				"openai — 直接转发",
+			},
+			Default: "anthropic — 自动转换 OpenAI→Anthropic 格式",
+		},
+		&protocolSelection,
+		askOpts...,
+	); err != nil {
+		return "", "", "", "", err
+	}
+	protocol := strings.TrimSpace(strings.SplitN(protocolSelection, " ", 2)[0])
+
+	modelOptions := append(append([]string{}, openRouterModels...), "[自定义输入...]")
+	selectedModel := ""
+	if err := survey.AskOne(
+		&survey.Select{
+			Message: "选择模型:",
+			Options: modelOptions,
+			Default: openRouterModels[0],
+			Filter: func(filter string, value string, index int) bool {
+				filter = strings.ToLower(strings.TrimSpace(filter))
+				if filter == "" {
+					return true
+				}
+				return strings.Contains(strings.ToLower(value), filter)
+			},
+		},
+		&selectedModel,
+		askOpts...,
+	); err != nil {
+		return "", "", "", "", err
+	}
+
+	if selectedModel == "[自定义输入...]" {
+		if err := survey.AskOne(
+			&survey.Input{Message: "输入自定义模型名:"},
+			&selectedModel,
+			append(askOpts, survey.WithValidator(func(ans interface{}) error {
+				if strings.TrimSpace(ans.(string)) == "" {
+					return fmt.Errorf("模型名称不能为空")
+				}
+				return nil
+			}))...,
+		); err != nil {
+			return "", "", "", "", err
+		}
+		selectedModel = strings.TrimSpace(selectedModel)
+	}
+
+	upstreamModel := ""
+	if err := survey.AskOne(
+		&survey.Input{Message: "上游模型名:"},
+		&upstreamModel,
+		append(askOpts, survey.WithValidator(func(ans interface{}) error {
+			if strings.TrimSpace(ans.(string)) == "" {
+				return fmt.Errorf("模型名称不能为空")
+			}
+			return nil
+		}))...,
+	); err != nil {
+		return "", "", "", "", err
+	}
+
+	return upstream, protocol, selectedModel, strings.TrimSpace(upstreamModel), nil
+}
+
+func finishWizard(configPath string, out io.Writer, upstream, protocol, selectedModel, upstreamModel string) error {
 
 	// Print summary.
 	fmt.Fprintln(out)

@@ -14,7 +14,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
+
+	"github.com/zhangyc/trae-proxy/internal/privilege"
 )
 
 func GenerateCA(dir string) error {
@@ -186,6 +189,14 @@ func UninstallCA(caCertPath string) error {
 }
 
 func elevatedExec(name string, args ...string) error {
+	if runtime.GOOS == "darwin" {
+		parts := append([]string{name}, args...)
+		escaped := make([]string, len(parts))
+		for i, p := range parts {
+			escaped[i] = shellQuote(p)
+		}
+		return privilege.RunPrivileged(strings.Join(escaped, " "))
+	}
 	if runtime.GOOS == "windows" {
 		return exec.Command(name, args...).Run()
 	}
@@ -195,6 +206,10 @@ func elevatedExec(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func writePEM(path string, blockType string, data []byte) error {

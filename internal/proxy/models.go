@@ -67,17 +67,109 @@ func serveFakeModels(s *Server, w http.ResponseWriter) {
 	var models []map[string]interface{}
 	now := int(time.Now().Unix())
 	for _, id := range ids {
+		tokenizer := "Other"
+		switch {
+		case strings.HasPrefix(id, "anthropic/"):
+			tokenizer = "Claude"
+		case strings.HasPrefix(id, "openai/"):
+			tokenizer = "GPT"
+		}
+
 		models = append(models, map[string]interface{}{
-			"id":       id,
-			"object":   "model",
-			"created":  now,
-			"owned_by": "anthropic",
+			"id":             id,
+			"canonical_slug": id,
+			"name":           humanModelName(id),
+			"created":        now,
+			"description":    "",
+			"context_length": 200000,
+			"architecture": map[string]interface{}{
+				"modality":          "text+image->text",
+				"input_modalities":  []string{"text", "image"},
+				"output_modalities": []string{"text"},
+				"tokenizer":         tokenizer,
+				"instruct_type":     nil,
+			},
+			"pricing": map[string]string{
+				"prompt":     "0",
+				"completion": "0",
+			},
+			"top_provider": map[string]interface{}{
+				"context_length":        200000,
+				"max_completion_tokens": 128000,
+				"is_moderated":          false,
+			},
+			"per_request_limits": nil,
+			"supported_parameters": []string{
+				"max_tokens",
+				"temperature",
+				"tools",
+				"tool_choice",
+				"top_p",
+				"response_format",
+				"stop",
+				"stream",
+			},
+			"default_parameters": map[string]interface{}{
+				"temperature":       nil,
+				"top_p":             nil,
+				"top_k":             nil,
+				"frequency_penalty": nil,
+				"presence_penalty":  nil,
+			},
+			"knowledge_cutoff": nil,
+			"expiration_date":  nil,
 		})
 	}
 	resp := map[string]interface{}{
-		"object": "list",
-		"data":   models,
+		"data": models,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func humanModelName(id string) string {
+	parts := strings.SplitN(id, "/", 2)
+	if len(parts) != 2 {
+		return titleModelWords(id)
+	}
+
+	providerNames := map[string]string{
+		"anthropic": "Anthropic",
+		"openai":    "OpenAI",
+		"google":    "Google",
+		"minimax":   "MiniMax",
+		"qwen":      "Qwen",
+		"z-ai":      "Z-AI",
+	}
+	provider := providerNames[parts[0]]
+	if provider == "" {
+		provider = titleModelWords(parts[0])
+	}
+	return provider + ": " + titleModelWords(parts[1])
+}
+
+func titleModelWords(s string) string {
+	words := strings.Split(strings.ReplaceAll(s, "-", " "), " ")
+	for i, word := range words {
+		switch strings.ToLower(word) {
+		case "gpt":
+			words[i] = "GPT"
+		case "glm":
+			words[i] = "GLM"
+		case "claude":
+			words[i] = "Claude"
+		case "gemini":
+			words[i] = "Gemini"
+		case "minimax":
+			words[i] = "MiniMax"
+		case "qwen":
+			words[i] = "Qwen"
+		default:
+			if word == "" {
+				continue
+			}
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }

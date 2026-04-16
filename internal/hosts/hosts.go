@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/zhangyc/trae-proxy/internal/privilege"
 )
 
 const marker = "# trae-proxy"
@@ -52,6 +54,15 @@ func Add(domain string) error {
 		return err
 	}
 
+	if runtime.GOOS == "darwin" {
+		script := fmt.Sprintf("printf '%%s' %s | tee -a %s > /dev/null", shellQuote(line), shellQuote(HostsPath()))
+		if err := privilege.RunPrivileged(script); err != nil {
+			return fmt.Errorf("add hosts entry: %w", err)
+		}
+		flushDNSCache()
+		return nil
+	}
+
 	cmd := exec.Command("sudo", "tee", "-a", HostsPath())
 	cmd.Stdin = strings.NewReader(line)
 	cmd.Stdout = nil
@@ -82,6 +93,31 @@ func Remove() error {
 		return os.WriteFile(HostsPath(), []byte(content), 0644)
 	}
 
+	if runtime.GOOS == "darwin" {
+		tmpFile, err := os.CreateTemp("", "trae-proxy-hosts-*")
+		if err != nil {
+			return fmt.Errorf("create temp file: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		if _, err := tmpFile.WriteString(content); err != nil {
+			tmpFile.Close()
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("write temp file: %w", err)
+		}
+		if err := tmpFile.Close(); err != nil {
+			_ = os.Remove(tmpPath)
+			return fmt.Errorf("close temp file: %w", err)
+		}
+		defer os.Remove(tmpPath)
+
+		script := fmt.Sprintf("cat %s > %s && rm -f %s", shellQuote(tmpPath), shellQuote(HostsPath()), shellQuote(tmpPath))
+		if err := privilege.RunPrivileged(script); err != nil {
+			return fmt.Errorf("remove hosts entry: %w", err)
+		}
+		flushDNSCache()
+		return nil
+	}
+
 	cmd := exec.Command("sudo", "tee", HostsPath())
 	cmd.Stdin = strings.NewReader(content)
 	cmd.Stdout = nil
@@ -96,7 +132,11 @@ func Remove() error {
 
 func flushDNSCache() {
 	if runtime.GOOS == "darwin" {
-		exec.Command("sudo", "dscacheutil", "-flushcache").Run()
-		exec.Command("sudo", "killall", "-HUP", "mDNSResponder").Run()
+		_ = privilege.RunPrivileged("dscacheutil -flushcache")
+		_ = privilege.RunPrivileged("killall -HUP mDNSResponder")
 	}
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

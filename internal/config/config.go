@@ -42,12 +42,12 @@ func DefaultConfig() *Config {
 		LogLevel:         "info",
 		LogBody:          false,
 		Models: map[string]string{
-			"anthropic/claude-sonnet-4.6":   "claude-sonnet-4.6",
-			"anthropic/claude-opus-4.6":     "claude-opus-4.6",
-			"anthropic/claude-haiku-4.5":    "",
-			"openai/gpt-oss-120b":           "gpt-5.4",
-			"openai/gpt-5.4":                "",
-			"openai/gpt-5.4-mini":           "",
+			"anthropic/claude-sonnet-4.6":          "claude-sonnet-4.6",
+			"anthropic/claude-opus-4.6":            "claude-opus-4.6",
+			"anthropic/claude-haiku-4.5":           "",
+			"openai/gpt-oss-120b":                  "gpt-5.4",
+			"openai/gpt-5.4":                       "",
+			"openai/gpt-5.4-mini":                  "",
 			"google/gemini-3.1-pro-preview":        "",
 			"google/gemini-3.1-flash-lite-preview": "",
 			"minimax/minimax-m2.7":                 "",
@@ -116,6 +116,16 @@ func Load(path string, overrides map[string]string) (*Config, error) {
 	cfg.parseUpstreamURL()
 
 	return cfg, nil
+}
+
+// Save writes the config to the given path in TOML format.
+func Save(path string, cfg *Config) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(cfg)
 }
 
 func ConfigDir() (string, error) {

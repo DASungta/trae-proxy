@@ -5,16 +5,21 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zhangyc/trae-proxy/internal/config"
 	"github.com/zhangyc/trae-proxy/internal/daemon"
 	"github.com/zhangyc/trae-proxy/internal/hosts"
 	"github.com/zhangyc/trae-proxy/internal/logging"
+	"github.com/zhangyc/trae-proxy/internal/privilege"
 	"github.com/zhangyc/trae-proxy/internal/proxy"
 	tlsutil "github.com/zhangyc/trae-proxy/internal/tls"
 	"github.com/zhangyc/trae-proxy/internal/updater"
@@ -143,6 +148,9 @@ func initCmd() *cobra.Command {
 			}
 
 			fmt.Println("[init] installing CA to system trust store (may prompt for password)...")
+			if runtime.GOOS == "darwin" {
+				fmt.Println("[init] 需要系统权限安装 CA 证书，即将弹出系统授权对话框...")
+			}
 			if err := tlsutil.InstallCA(filepath.Join(caDir, "root-ca.pem")); err != nil {
 				fmt.Printf("[init] WARNING: failed to install CA: %v\n", err)
 				fmt.Println("[init] you may need to manually trust the CA")
@@ -278,6 +286,28 @@ func uninstallCmd() *cobra.Command {
 				}
 			}
 
+			if pid443 := findPort443Process(); pid443 > 0 {
+				fmt.Printf("[uninstall] 检测到 PID %d 仍占用 443 端口，尝试终止...\n", pid443)
+				if err := syscall.Kill(pid443, syscall.SIGTERM); err == nil {
+					time.Sleep(500 * time.Millisecond)
+					if findPort443Process() > 0 {
+						fmt.Printf("[uninstall] 进程未退出，强制终止...\n")
+						if runtime.GOOS == "darwin" {
+							_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid443))
+						} else {
+							_ = syscall.Kill(pid443, syscall.SIGKILL)
+						}
+					}
+				} else {
+					fmt.Printf("[uninstall] SIGTERM 失败，尝试强制终止...\n")
+					if runtime.GOOS == "darwin" {
+						_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid443))
+					} else {
+						_ = syscall.Kill(pid443, syscall.SIGKILL)
+					}
+				}
+			}
+
 			dir, _ := config.ConfigDir()
 			caDir := filepath.Join(dir, "ca")
 
@@ -340,6 +370,7 @@ func updateCmd() *cobra.Command {
 		Use:   "update",
 		Short: "Update trae-proxy to the latest release (macOS/Linux only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			oldVersion := version
 			assetName, err := updater.AssetName()
 			if err != nil {
 				return err
@@ -393,7 +424,8 @@ func updateCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("[update] updated from %s to %s\n", version, tag)
+			fmt.Printf("[update] updated from %s to %s\n", oldVersion, tag)
+			PrintMigrationGuide(oldVersion, tag)
 			if pid, running := daemon.IsRunning(); running {
 				fmt.Printf("[update] daemon is running (pid %d) — restart it to use the new version\n", pid)
 			}
@@ -538,7 +570,16 @@ func runProxy(opts startOptions) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	if changed, report := config.Migrate(configPath, cfg); changed {
+		for _, msg := range report {
+			fmt.Printf("[migrate] %s\n", msg)
+		}
+	}
+
 	fmt.Printf("[start] adding hosts entry for %s...\n", cfg.Hijack)
+	if runtime.GOOS == "darwin" {
+		fmt.Printf("[start] 需要系统权限修改 /etc/hosts，即将弹出系统授权对话框...\n")
+	}
 	if err := hosts.Add(cfg.Hijack); err != nil {
 		return fmt.Errorf("add hosts: %w", err)
 	}
@@ -630,4 +671,27 @@ func colorStatusLine(line string, level colorLevel, enabled bool) string {
 	}
 
 	return color + line + colorReset
+}
+
+// findPort443Process returns PID of a process named "trae-proxy" listening on :443, or 0 if none.
+func findPort443Process() int {
+	if runtime.GOOS == "windows" {
+		return 0
+	}
+	out, err := exec.Command("lsof", "-nP", "-iTCP:443", "-sTCP:LISTEN").Output()
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, "trae-proxy") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				pid, err := strconv.Atoi(fields[1])
+				if err == nil {
+					return pid
+				}
+			}
+		}
+	}
+	return 0
 }
