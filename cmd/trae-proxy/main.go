@@ -5,16 +5,22 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/zhangyc/trae-proxy/internal/config"
 	"github.com/zhangyc/trae-proxy/internal/daemon"
 	"github.com/zhangyc/trae-proxy/internal/hosts"
 	"github.com/zhangyc/trae-proxy/internal/logging"
+	"github.com/zhangyc/trae-proxy/internal/privilege"
 	"github.com/zhangyc/trae-proxy/internal/proxy"
 	tlsutil "github.com/zhangyc/trae-proxy/internal/tls"
 	"github.com/zhangyc/trae-proxy/internal/updater"
@@ -143,6 +149,9 @@ func initCmd() *cobra.Command {
 			}
 
 			fmt.Println("[init] installing CA to system trust store (may prompt for password)...")
+			if runtime.GOOS == "darwin" {
+				fmt.Println("[init] 需要系统权限安装 CA 证书，即将弹出系统授权对话框...")
+			}
 			if err := tlsutil.InstallCA(filepath.Join(caDir, "root-ca.pem")); err != nil {
 				fmt.Printf("[init] WARNING: failed to install CA: %v\n", err)
 				fmt.Println("[init] you may need to manually trust the CA")
@@ -278,19 +287,32 @@ func uninstallCmd() *cobra.Command {
 				}
 			}
 
+			if pid443 := findPort443Process(); pid443 > 0 {
+				fmt.Printf("[uninstall] 检测到 PID %d 仍占用 443 端口，尝试终止...\n", pid443)
+				killProcess(pid443)
+			}
+
 			dir, _ := config.ConfigDir()
 			caDir := filepath.Join(dir, "ca")
 
 			caCertPath := filepath.Join(caDir, "root-ca.pem")
-			if _, err := os.Stat(caCertPath); err == nil {
-				fmt.Println("[uninstall] removing CA from system trust store...")
-				if err := tlsutil.UninstallCA(caCertPath); err != nil {
+
+			if runtime.GOOS == "darwin" {
+				// Combine CA removal + hosts cleanup into a single privileged call.
+				if err := darwinUninstallPrivileged(caCertPath); err != nil {
 					fmt.Printf("[uninstall] WARNING: %v\n", err)
 				}
-			}
+			} else {
+				if _, err := os.Stat(caCertPath); err == nil {
+					fmt.Println("[uninstall] removing CA from system trust store...")
+					if err := tlsutil.UninstallCA(caCertPath); err != nil {
+						fmt.Printf("[uninstall] WARNING: %v\n", err)
+					}
+				}
 
-			fmt.Println("[uninstall] removing hosts entry...")
-			hosts.Remove()
+				fmt.Println("[uninstall] removing hosts entry...")
+				hosts.Remove()
+			}
 
 			// Remove the binary itself.
 			exePath, err := os.Executable()
@@ -340,6 +362,7 @@ func updateCmd() *cobra.Command {
 		Use:   "update",
 		Short: "Update trae-proxy to the latest release (macOS/Linux only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			oldVersion := version
 			assetName, err := updater.AssetName()
 			if err != nil {
 				return err
@@ -393,7 +416,8 @@ func updateCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("[update] updated from %s to %s\n", version, tag)
+			fmt.Printf("[update] updated from %s to %s\n", oldVersion, tag)
+			PrintMigrationGuide(oldVersion, tag)
 			if pid, running := daemon.IsRunning(); running {
 				fmt.Printf("[update] daemon is running (pid %d) — restart it to use the new version\n", pid)
 			}
@@ -538,11 +562,24 @@ func runProxy(opts startOptions) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	if changed, report := config.Migrate(configPath, cfg); changed {
+		for _, msg := range report {
+			fmt.Printf("[migrate] %s\n", msg)
+		}
+	}
+
 	fmt.Printf("[start] adding hosts entry for %s...\n", cfg.Hijack)
+	if runtime.GOOS == "darwin" {
+		fmt.Printf("[start] 需要系统权限修改 /etc/hosts，即将弹出系统授权对话框...\n")
+	}
 	if err := hosts.Add(cfg.Hijack); err != nil {
 		return fmt.Errorf("add hosts: %w", err)
 	}
-	defer hosts.Remove() // ensure cleanup on any exit (panic, fatal, etc.)
+	var removeOnce sync.Once
+	cleanupHosts := func() {
+		removeOnce.Do(func() { hosts.Remove() })
+	}
+	defer cleanupHosts()
 
 	tlsCfg, err := tlsutil.LoadServerTLSConfig(caDir)
 	if err != nil {
@@ -566,7 +603,7 @@ func runProxy(opts startOptions) error {
 	go func() {
 		<-sigCh
 		fmt.Println("\n[trae-proxy] shutting down...")
-		hosts.Remove()
+		cleanupHosts()
 		cancel()
 	}()
 
@@ -630,4 +667,89 @@ func colorStatusLine(line string, level colorLevel, enabled bool) string {
 	}
 
 	return color + line + colorReset
+}
+
+// findPort443Process returns PID of a process named "trae-proxy" listening on :443, or 0 if none.
+func killProcess(pid int) {
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return
+	}
+	if err := proc.Signal(syscall.SIGTERM); err == nil {
+		time.Sleep(500 * time.Millisecond)
+		if findPort443Process() == 0 {
+			return
+		}
+	}
+	fmt.Printf("[uninstall] 进程未退出，强制终止...\n")
+	if runtime.GOOS == "darwin" {
+		_ = privilege.RunPrivileged(fmt.Sprintf("kill -9 %d", pid))
+	} else {
+		_ = proc.Kill()
+	}
+}
+
+func darwinUninstallPrivileged(caCertPath string) error {
+	var cmds []string
+
+	if _, err := os.Stat(caCertPath); err == nil {
+		fmt.Println("[uninstall] removing CA from system trust store...")
+		cmds = append(cmds, fmt.Sprintf("security remove-trusted-cert -d %s",
+			shellQuote(caCertPath)))
+	}
+
+	data, err := os.ReadFile(hosts.HostsPath())
+	if err == nil {
+		var filtered []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if !strings.Contains(line, "# trae-proxy") {
+				filtered = append(filtered, line)
+			}
+		}
+		content := strings.Join(filtered, "\n")
+
+		tmpFile, err := os.CreateTemp("", "trae-proxy-hosts-*")
+		if err == nil {
+			tmpPath := tmpFile.Name()
+			tmpFile.WriteString(content)
+			tmpFile.Close()
+			defer os.Remove(tmpPath)
+
+			fmt.Println("[uninstall] removing hosts entry...")
+			cmds = append(cmds,
+				fmt.Sprintf("cat %s > %s && rm -f %s && dscacheutil -flushcache && killall -HUP mDNSResponder",
+					shellQuote(tmpPath), shellQuote(hosts.HostsPath()), shellQuote(tmpPath)))
+		}
+	}
+
+	if len(cmds) == 0 {
+		return nil
+	}
+	return privilege.RunPrivileged(strings.Join(cmds, " && "))
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func findPort443Process() int {
+	if runtime.GOOS == "windows" {
+		return 0
+	}
+	out, err := exec.Command("lsof", "-nP", "-iTCP:443", "-sTCP:LISTEN").Output()
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, "trae-proxy") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				pid, err := strconv.Atoi(fields[1])
+				if err == nil {
+					return pid
+				}
+			}
+		}
+	}
+	return 0
 }

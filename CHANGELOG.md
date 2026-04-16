@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.0] - 2026-04-17
+
+### Features
+
+- **macOS 免 sudo**：使用 `osascript` 原生系统授权对话框替代 `sudo`，解决 `config.toml` 被 root 占有的问题。
+- **向导方向键支持**：终端环境下使用 `survey/v2` 库，支持方向键选择、关键字过滤、自定义输入。
+- **`/v1/models` OpenRouter 格式**：返回包含 `canonical_slug`、`architecture`、`pricing` 等字段的 OpenRouter 兼容格式，Trae IDE 可正常识别。
+- **自定义模型支持**：init 向导中填入的自定义模型会自动写入配置并出现在 `/v1/models` 列表中。
+- **请求/响应日志分离**：收到请求时立即打印 `request received`（含 model、stream），响应完成后打印 `response done`（含 status、耗时）。
+
+### Improvements
+
+- **密码弹框大幅减少**：合并同一操作中的多次 `RunPrivileged` 调用为单次，`start` 从 6+ 次降至 2 次，`uninstall` 从 4 次降至 1 次。
+- **`start` 退出时防重复清理**：使用 `sync.Once` 确保信号处理和 defer 不会重复调用 `hosts.Remove()`。
+- **向导模型列表自动同步**：模型列表从 `DefaultConfig` 动态读取，不再维护两份硬编码列表。
+- **向导提示信息完善**：survey 路径直接显示示例 URL、协议说明、模型用途等引导文字，无需按 `?` 查看。
+- **模型选择全部展示**：Select 列表设置 `PageSize` 为列表总数，无需滚动即可看到所有选项。
+
+### Upgrade Guide
+
+从 v0.3.x 升级请参阅 [升级指引](docs/upgrade-v0.4.0.md)。
+
+---
+
 ## [v0.3.3] - 2026-04-16
 
 ### Improvements

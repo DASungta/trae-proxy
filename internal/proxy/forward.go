@@ -43,7 +43,7 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 			upstreamURL string
 		)
 		defer func() {
-			logger.Info("request done",
+			logger.Info("response done",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"upstream_url", upstreamURL,
@@ -60,6 +60,11 @@ func HandleForward(cfg *config.Config, logger *logging.Logger, client *http.Clie
 			return
 		}
 		defer r.Body.Close()
+
+		logger.Info("request received",
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
 
 		// Tap 1: original client request.
 		logger.Trace("client request",

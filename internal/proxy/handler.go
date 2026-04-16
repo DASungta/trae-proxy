@@ -35,7 +35,7 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 			upstreamURL string
 		)
 		defer func() {
-			logger.Info("request done",
+			logger.Info("response done",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"upstream_url", upstreamURL,
@@ -72,6 +72,14 @@ func HandleChatCompletions(cfg *config.Config, logger *logging.Logger, client *h
 
 		origModel, _ := reqData["model"].(string)
 		isStream, _ := reqData["stream"].(bool)
+
+		logger.Info("request received",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"model", origModel,
+			"mapped", cfg.MapModel(origModel),
+			"stream", isStream,
+		)
 
 		anthropicReq := ChatToAnthropic(reqData, cfg.MapModel)
 
