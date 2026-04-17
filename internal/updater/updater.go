@@ -108,9 +108,10 @@ func (u *Updater) FetchChecksum(tag, assetName string) (string, error) {
 	return "", fmt.Errorf("checksum for %q not found in checksums.txt", assetName)
 }
 
-// Download fetches the release asset to a temp file in the same directory as
-// destPath (guarantees same filesystem for atomic rename). Returns the temp path.
-func (u *Updater) Download(tag, assetName, destPath string) (string, error) {
+// Download fetches the release asset to a temp file in os.TempDir() and returns
+// the temp path. Using the system temp dir avoids permission issues when the
+// current binary lives in a root-owned directory (e.g. /usr/local/bin).
+func (u *Updater) Download(tag, assetName, _ string) (string, error) {
 	url := fmt.Sprintf("%s/%s/releases/download/%s/%s", ghBase, repo, tag, assetName)
 	resp, err := u.Client.Get(url)
 	if err != nil {
@@ -122,11 +123,11 @@ func (u *Updater) Download(tag, assetName, destPath string) (string, error) {
 		return "", fmt.Errorf("download returned HTTP %d", resp.StatusCode)
 	}
 
-	tmpPath := destPath + ".new"
-	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	f, err := os.CreateTemp("", "trae-proxy-*.new")
 	if err != nil {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
+	tmpPath := f.Name()
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		f.Close()

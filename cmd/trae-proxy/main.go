@@ -424,7 +424,13 @@ func updateCmd() *cobra.Command {
 
 			fmt.Printf("[update] installing to %s...\n", exePath)
 			if err := updater.Replace(exePath, tmpPath); err != nil {
-				return err
+				if !os.IsPermission(err) {
+					return err
+				}
+				fmt.Println("[update] 权限不足，正在请求系统授权...")
+				if err2 := replacePrivileged(tmpPath, exePath); err2 != nil {
+					return fmt.Errorf("replace binary: %w", err2)
+				}
 			}
 
 			fmt.Printf("[update] updated from %s to %s\n", oldVersion, tag)
@@ -755,6 +761,21 @@ func removePrivileged(path string) error {
 		return cmd.Run()
 	default:
 		return exec.Command("cmd", "/C", "del", "/F", path).Run()
+	}
+}
+
+func replacePrivileged(src, dest string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return privilege.RunPrivileged("mv -f " + shellQuote(src) + " " + shellQuote(dest) + " && chmod 755 " + shellQuote(dest))
+	case "linux":
+		cmd := exec.Command("sudo", "sh", "-c", "mv -f "+shellQuote(src)+" "+shellQuote(dest)+" && chmod 755 "+shellQuote(dest))
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	default:
+		return exec.Command("cmd", "/C", "move", "/Y", src, dest).Run()
 	}
 }
 

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.4] - 2026-04-17
+
+### Bug Fixes
+
+- **`update` 命令 permission denied**：二进制安装在 `/usr/local/bin`（root 所有）时，`update` 写临时文件和替换二进制均因权限不足失败。
+  - `Download()` 改为写入系统临时目录（`os.TempDir()`），彻底绕开安装目录写权限问题
+  - `Replace()` 失败且错误为 permission denied 时，自动通过 osascript（macOS GUI）或 sudo（SSH/Linux）提权执行 `mv + chmod 755`，与 `uninstall` 的处理模式一致
+
+---
+
 ## [v0.4.3] - 2026-04-17
 
 ### Bug Fixes
