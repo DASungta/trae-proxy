@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.2] - 2026-04-17
+
+### Bug Fixes
+
+- **uninstall 无法删除 `/usr/local/bin` 下的二进制文件**：`os.Remove` 权限不足时，macOS 通过系统授权对话框提权删除，Linux 通过 `sudo rm` 处理。
+
+---
+
+## [v0.4.1] - 2026-04-17
+
+### Features
+
+- **Windows 一键安装脚本**：新增 `install.ps1`，普通用户 PowerShell 一行命令完成安装，无需手动配置环境变量。
+  - 自动下载最新版本并校验 SHA256
+  - 安装到 `%LOCALAPPDATA%\trae-proxy\`，无需管理员权限
+  - 自动写入用户级 PATH 并广播 `WM_SETTINGCHANGE`，新开终端即可使用
+  - 支持 `$env:VERSION` 指定版本
+
+### Bug Fixes
+
+- **macOS 15+ CA 证书安装**：移除 `-d` 和 `-k /Library/Keychains/System.keychain` 参数，改为写入用户登录 Keychain，修复 `SecTrustSettingsSetTrustSettings` 授权报错，不再需要管理员权限。
+
+---
+
 ## [v0.4.0] - 2026-04-17
 
 ### Features
