@@ -33,6 +33,71 @@ type Config struct {
 	upstreamAnthropicURL string
 }
 
+// ModelMapping is a single request-model → upstream-model pair.
+type ModelMapping struct {
+	RequestModel  string
+	UpstreamModel string
+}
+
+// ModelGroup is a named group of model mappings used for ordered, annotated rendering.
+type ModelGroup struct {
+	Comment  string
+	Mappings []ModelMapping
+}
+
+// DefaultModelGroups returns the canonical ordered list of model groups.
+func DefaultModelGroups() []ModelGroup {
+	return []ModelGroup{
+		{
+			Comment: "# 海外版（新模型）",
+			Mappings: []ModelMapping{
+				{"anthropic/claude-sonnet-4.6", "claude-sonnet-4.6"},
+				{"anthropic/claude-opus-4.6", "claude-opus-4.6"},
+				{"anthropic/claude-haiku-4.5", ""},
+				{"openai/gpt-oss-120b", "gpt-5.4"},
+				{"openai/gpt-5.4", ""},
+				{"openai/gpt-5.4-mini", ""},
+				{"google/gemini-3.1-pro-preview", ""},
+				{"google/gemini-3.1-flash-lite-preview", ""},
+				{"minimax/minimax-m2.7", ""},
+				{"qwen/qwen3-coder-next", ""},
+				{"z-ai/glm-5", ""},
+			},
+		},
+		{
+			Comment: "# 国内版（旧模型）",
+			Mappings: []ModelMapping{
+				{"anthropic/claude-sonnet-4.5", "claude-sonnet-4.6"},
+				{"anthropic/claude-opus-4.1", "claude-opus-4.6"},
+				{"anthropic/claude-4-sonnet", "claude-sonnet-4.6"},
+				{"anthropic/claude-4-opus", "claude-opus-4.6"},
+				{"anthropic/claude-3.7-sonnet", "claude-sonnet-4.6"},
+				{"openai/gpt-5", "gpt-5.4"},
+				{"openai/gpt-4.1", "gpt-5.4-mini"},
+				{"openai/gpt-4o", "gpt-5.4-mini"},
+				{"google/gemini-3-pro-preview", ""},
+				{"google/gemini-2.5-pro", ""},
+				{"minimax/minimax-m2", ""},
+				{"qwen/qwen3-coder", ""},
+			},
+		},
+	}
+}
+
+// DefaultModels returns the full default model map, merging any extra mappings.
+func DefaultModels(extra map[string]string) map[string]string {
+	m := make(map[string]string)
+	for _, g := range DefaultModelGroups() {
+		for _, mm := range g.Mappings {
+			m[mm.RequestModel] = mm.UpstreamModel
+		}
+	}
+	for k, v := range extra {
+		m[k] = v
+	}
+	return m
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Upstream:         "http://192.168.48.12:8080",
@@ -41,33 +106,7 @@ func DefaultConfig() *Config {
 		Hijack:           "openrouter.ai",
 		LogLevel:         "info",
 		LogBody:          false,
-		Models: map[string]string{
-			// 海外版 Trae 当前展示的最新模型
-			"anthropic/claude-sonnet-4.6":          "claude-sonnet-4.6",
-			"anthropic/claude-opus-4.6":            "claude-opus-4.6",
-			"anthropic/claude-haiku-4.5":           "",
-			"openai/gpt-oss-120b":                  "gpt-5.4",
-			"openai/gpt-5.4":                       "",
-			"openai/gpt-5.4-mini":                  "",
-			"google/gemini-3.1-pro-preview":        "",
-			"google/gemini-3.1-flash-lite-preview": "",
-			"minimax/minimax-m2.7":                 "",
-			"qwen/qwen3-coder-next":                "",
-			"z-ai/glm-5":                           "",
-			// 国内版 Trae 仍展示的老模型
-			"anthropic/claude-sonnet-4.5": "claude-sonnet-4.6",
-			"anthropic/claude-opus-4.1":   "claude-opus-4.6",
-			"anthropic/claude-4-sonnet":   "claude-sonnet-4.6",
-			"anthropic/claude-4-opus":     "claude-opus-4.6",
-			"anthropic/claude-3.7-sonnet": "claude-sonnet-4.6",
-			"openai/gpt-5":                "gpt-5.4",
-			"openai/gpt-4.1":              "gpt-5.4-mini",
-			"openai/gpt-4o":               "gpt-5.4-mini",
-			"google/gemini-3-pro-preview": "",
-			"google/gemini-2.5-pro":       "",
-			"minimax/minimax-m2":          "",
-			"qwen/qwen3-coder":            "",
-		},
+		Models:           DefaultModels(nil),
 	}
 }
 
