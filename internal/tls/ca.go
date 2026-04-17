@@ -99,11 +99,13 @@ func GenerateServerCert(dir string, caCert *x509.Certificate, caKey *ecdsa.Priva
 			Organization: []string{"trae-proxy"},
 			CommonName:   domain,
 		},
-		DNSNames:    []string{domain},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:              []string{domain},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  false,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &key.PublicKey, caKey)
@@ -148,6 +150,12 @@ func NeedsRegeneration(dir string, domain string) bool {
 	if err != nil {
 		return true
 	}
+	if time.Until(cert.NotAfter) < 30*24*time.Hour {
+		return true
+	}
+	if cert.NotAfter.Sub(cert.NotBefore) > 398*24*time.Hour {
+		return true
+	}
 	for _, name := range cert.DNSNames {
 		if name == domain {
 			return false
@@ -159,13 +167,15 @@ func NeedsRegeneration(dir string, domain string) bool {
 func InstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		// Install into the user login keychain — no admin privileges required.
-		// Omitting -d and -k /Library/Keychains/System.keychain avoids the
-		// SecTrustSettingsSetTrustSettings authorization error on macOS 15+.
-		cmd := exec.Command("security", "add-trusted-cert", "-r", "trustRoot", caCertPath)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		// macOS 14/15/26: Network.framework / ATS / CFNetwork 不认可仅在 user login keychain
+		// 的自签根锚点（Electron / hardened-runtime 进程尤为严格）。必须写入系统 keychain。
+		// -p ssl 限定 trust 策略为 SSL，符合 Apple macOS 15+ 指引。
+		return elevatedExec("security", "add-trusted-cert",
+			"-d",
+			"-r", "trustRoot",
+			"-p", "ssl",
+			"-k", "/Library/Keychains/System.keychain",
+			caCertPath)
 	case "linux":
 		dest := "/usr/local/share/ca-certificates/trae-proxy.crt"
 		if err := elevatedExec("cp", caCertPath, dest); err != nil {
@@ -182,10 +192,7 @@ func InstallCA(caCertPath string) error {
 func UninstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		cmd := exec.Command("security", "remove-trusted-cert", caCertPath)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return elevatedExec("security", "remove-trusted-cert", "-d", caCertPath)
 	case "linux":
 		elevatedExec("rm", "-f", "/usr/local/share/ca-certificates/trae-proxy.crt")
 		return elevatedExec("update-ca-certificates", "--fresh")

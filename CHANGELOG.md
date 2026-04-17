@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.3] - 2026-04-17
+
+### Bug Fixes
+
+- **macOS 26 / Network.framework TLS 握手 EOF**：v0.4.1 引入的"无管理员权限安装 CA"在 macOS 14/15/26 的 Network.framework / ATS 校验下失效，导致 Trae IDE 请求时服务端日志出现 `TLS handshake error: EOF`。根因：CA 仅写入用户 login keychain，而 Electron（硬化运行时）的网络栈只读取系统 keychain 的信任锚点。  
+  已恢复为通过 osascript 管理员授权（GUI 会话）或 sudo（SSH 会话）将 CA 写入 `/Library/Keychains/System.keychain`，并新增 `-p ssl` 策略限定，与 Apple macOS 15+ 指引对齐。
+- **UninstallCA 权限**：`uninstall` 时对系统 keychain 中的 CA 调用 `security remove-trusted-cert -d` 同步补充提权，避免卸载残留。
+- **leaf 证书 basicConstraints**：服务端证书补充 `BasicConstraints: CA=false` 扩展，符合 Apple "Requirements for trusted certificates" 规范，避免部分严格校验器拒绝。
+
+### Improvements
+
+- **证书有效期自检**：`NeedsRegeneration` 新增两条规则——剩余有效期 < 30 天或总有效期 > 398 天（超出 Apple 当前上限）时自动重签，防止在下次 `init` 前悄然失效。
+- **SSH 上下文兼容**：`privilege.RunPrivileged` 在检测到 SSH 会话时（`$SSH_TTY` / `$SSH_CONNECTION`）自动切换为 `sudo sh -c`，使远程维护场景下 `init` 可正常安装 CA。
+- **init 失败兜底提示**：CA 安装失败时自动打印手动修复命令，方便用户在无授权环境下自行处理。
+
+### Breaking Changes
+
+- `trae-proxy init` 在 macOS 上将再次弹出系统管理员授权对话框（与 v0.4.0 一致）。这是修复 macOS 26 兼容性的必要代价。
+
+---
+
 ## [v0.4.2] - 2026-04-17
 
 ### Bug Fixes

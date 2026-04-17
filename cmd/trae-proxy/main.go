@@ -152,9 +152,14 @@ func initCmd() *cobra.Command {
 			if runtime.GOOS == "darwin" {
 				fmt.Println("[init] 需要系统权限安装 CA 证书，即将弹出系统授权对话框...")
 			}
-			if err := tlsutil.InstallCA(filepath.Join(caDir, "root-ca.pem")); err != nil {
+			caPath := filepath.Join(caDir, "root-ca.pem")
+			if err := tlsutil.InstallCA(caPath); err != nil {
 				fmt.Printf("[init] WARNING: failed to install CA: %v\n", err)
-				fmt.Println("[init] you may need to manually trust the CA")
+				if runtime.GOOS == "darwin" {
+					fmt.Printf("[init] 可手动执行：sudo security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain %s\n", caPath)
+				} else {
+					fmt.Println("[init] you may need to manually trust the CA")
+				}
 			} else {
 				fmt.Println("[init] CA installed successfully")
 			}
