@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.7] - 2026-04-17
+
+### Features
+
+- **Windows CA 安装校验**：`trae-proxy init` 在 Windows 上通过 `certutil -addstore` 安装 Root CA 后，自动执行 `certutil -store ROOT` 校验是否写入成功；安装失败时输出手动修复命令（需管理员 PowerShell）。
+- **TLS 握手错误结构化日志**：`http.Server.ErrorLog` 接入结构化日志器，TLS 握手失败（`EOF`、证书错误等）以 WARN 级别输出，不再打印到 stderr，方便通过日志级别过滤调试信息。
+
+---
+
 ## [v0.4.6] - 2026-04-17
 
 ### Improvements
