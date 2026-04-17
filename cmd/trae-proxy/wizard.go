@@ -112,6 +112,7 @@ func promptModel(scanner *bufio.Scanner, out io.Writer) (string, error) {
 	fmt.Fprintln(out, "--- Step 3/3: 模型映射 ---")
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "在 Trae 中选择以下任一模型时，请求会被映射到你指定的上游模型。")
+	fmt.Fprintln(out, "输入序号选择（直接回车选择第 1 项）。")
 	fmt.Fprintln(out)
 	for i, m := range models {
 		fmt.Fprintf(out, "  %2d) %s\n", i+1, m)
@@ -139,21 +140,19 @@ func promptModel(scanner *bufio.Scanner, out io.Writer) (string, error) {
 func promptUpstreamModel(scanner *bufio.Scanner, out io.Writer, selectedModel string) (string, error) {
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "请输入上游服务实际接受的模型名称（当 Trae 请求 %s 时，将发送此名称给上游）\n", selectedModel)
+	fmt.Fprintf(out, "回车直接使用同名（直通映射: %s → %s）\n", selectedModel, selectedModel)
 	fmt.Fprintln(out, "例如: claude-sonnet-4-6, gpt-4o, glm-4-plus")
 	fmt.Fprintln(out)
 
-	for {
-		fmt.Fprint(out, "上游模型名称: ")
-		if !scanner.Scan() {
-			return "", io.EOF
-		}
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
-			fmt.Fprintln(out, "  ✗ 模型名称不能为空")
-			continue
-		}
-		return input, nil
+	fmt.Fprintf(out, "上游模型名称 [%s]: ", selectedModel)
+	if !scanner.Scan() {
+		return "", io.EOF
 	}
+	input := strings.TrimSpace(scanner.Text())
+	if input == "" {
+		return selectedModel, nil
+	}
+	return input, nil
 }
 
 func writeWizardConfig(path, upstream, protocol, selectedModel, upstreamModel string) error {
@@ -346,7 +345,7 @@ func runWizardSurvey() (string, string, string, string, error) {
 	fmt.Println("--- Step 3/4: 模型映射 ---")
 	fmt.Println()
 	fmt.Println("在 Trae 中选择以下任一模型时，请求会被映射到你指定的上游模型。")
-	fmt.Println("支持输入关键字过滤，选择 [自定义输入...] 可填写任意模型名。")
+	fmt.Println("提示：使用 ↑/↓ 键翻页，输入关键字可过滤；选择 [自定义输入...] 可填写任意模型名。")
 	fmt.Println()
 
 	models := openRouterModels()
@@ -357,7 +356,7 @@ func runWizardSurvey() (string, string, string, string, error) {
 			Message:  "选择模型:",
 			Options:  modelOptions,
 			Default:  models[0],
-			PageSize: len(modelOptions),
+			PageSize: 12,
 			Filter: func(filter string, value string, index int) bool {
 				filter = strings.ToLower(strings.TrimSpace(filter))
 				if filter == "" {
@@ -393,21 +392,19 @@ func runWizardSurvey() (string, string, string, string, error) {
 	fmt.Println("--- Step 4/4: 上游模型名 ---")
 	fmt.Println()
 	fmt.Printf("当 Trae 请求 %s 时，将发送此名称给上游。\n", selectedModel)
-	fmt.Println("例如: claude-sonnet-4-6, gpt-4o, glm-4-plus")
+	fmt.Println("回车直接使用同名（直通映射）；或填写上游实际模型名，例如: claude-sonnet-4-6, gpt-4o, glm-4-plus")
 	fmt.Println()
 
 	upstreamModel := ""
 	if err := survey.AskOne(
-		&survey.Input{Message: "上游模型名:"},
+		&survey.Input{Message: "上游模型名:", Default: selectedModel},
 		&upstreamModel,
-		append(askOpts, survey.WithValidator(func(ans interface{}) error {
-			if strings.TrimSpace(ans.(string)) == "" {
-				return fmt.Errorf("模型名称不能为空")
-			}
-			return nil
-		}))...,
+		askOpts...,
 	); err != nil {
 		return "", "", "", "", err
+	}
+	if strings.TrimSpace(upstreamModel) == "" {
+		upstreamModel = selectedModel
 	}
 
 	return upstream, protocol, selectedModel, strings.TrimSpace(upstreamModel), nil

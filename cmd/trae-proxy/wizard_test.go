@@ -168,15 +168,15 @@ func TestPromptUpstreamModel(t *testing.T) {
 		}
 	})
 
-	t.Run("empty then valid", func(t *testing.T) {
-		scanner := newTestScanner(strings.NewReader("\ngpt-4o\n"))
+	t.Run("empty returns selected model", func(t *testing.T) {
+		scanner := newTestScanner(strings.NewReader("\n"))
 		var out bytes.Buffer
 		got, err := promptUpstreamModel(scanner, &out, "openai/gpt-4o")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != "gpt-4o" {
-			t.Fatalf("got %q, want %q", got, "gpt-4o")
+		if got != "openai/gpt-4o" {
+			t.Fatalf("got %q, want %q", got, "openai/gpt-4o")
 		}
 	})
 }

@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.6] - 2026-04-17
+
+### Improvements
+
+- **init 向导模型选择支持分页**：v0.4.5 新增 12 个老模型后选择列表共 24 行，老终端无法一屏显示。改为 `PageSize=12`，并在提示文字中明确说明可使用 ↑/↓ 翻页和关键字过滤。
+- **上游模型名直通默认**：填写"上游模型名"时，回车即采用 Trae 端模型名（直通映射），免去常见同名场景下的重复输入。
+
+### Bug Fixes
+
+- **Windows install.ps1 报"在此对象上找不到属性 osarchitecture"**：`[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture` 需要 .NET Framework 4.7.1+，老 Windows 10 / Server 2016 自带 .NET 4.6.x 在 `StrictMode` 下抛出该错误。改用 `$env:PROCESSOR_ARCHITECTURE` + `$env:PROCESSOR_ARCHITEW6432`（Windows NT 起就支持），消除 .NET Framework 版本依赖。
+
+---
+
 ## [v0.4.5] - 2026-04-17
 
 ### Bug Fixes

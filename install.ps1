@@ -28,10 +28,18 @@ function Test-SupportedArchitecture {
         Fail '该安装脚本仅支持 Windows。'
     }
 
-    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-    switch ($arch) {
-        ([System.Runtime.InteropServices.Architecture]::X64) { return }
-        ([System.Runtime.InteropServices.Architecture]::Arm64) { Fail '暂不支持 Windows Arm64，请使用 x64 / amd64 机器。' }
+    # PROCESSOR_ARCHITEW6432 is set to the real OS arch when a 32-bit process runs
+    # on a 64-bit OS (WoW64); fall back to PROCESSOR_ARCHITECTURE otherwise.
+    # Both env vars have been available since Windows NT — no .NET version dependency.
+    $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    if (-not $arch) {
+        Fail '无法识别 CPU 架构（PROCESSOR_ARCHITECTURE 为空）。'
+    }
+
+    switch ($arch.ToUpperInvariant()) {
+        'AMD64' { return }
+        'ARM64' { Fail '暂不支持 Windows Arm64，请使用 x64 / amd64 机器。' }
+        'X86'   { Fail '暂不支持 32 位 Windows，请使用 x64 / amd64 机器。' }
         default { Fail "不支持的 CPU 架构: $arch（仅支持 Windows x64 / amd64）" }
     }
 }
