@@ -13,11 +13,38 @@
 
 ---
 
-## 第一步：下载 trae-proxy
+## 第一步：一键安装 trae-proxy
+
+在普通用户权限的 PowerShell 中运行：
+
+```powershell
+irm https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.ps1 | iex
+```
+
+更保守的执行方式（先保存再执行）：
+
+```powershell
+irm https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.ps1 -OutFile .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+脚本会自动：
+
+- 下载最新版本（或使用 `$env:VERSION` 指定版本，如 `$env:VERSION="v0.4.0"`）
+- 校验 SHA256 完整性
+- 安装到 `%LOCALAPPDATA%\trae-proxy\trae-proxy.exe`
+- 将安装目录写入当前用户 PATH
+
+安装脚本本身**不需要管理员权限**。若当前窗口仍提示找不到 `trae-proxy`，请关闭并重新打开 PowerShell。
+
+<details>
+<summary>手动安装（备用方案）</summary>
 
 1. 从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
 2. 重命名为 `trae-proxy.exe`，放到任意目录（如 `C:\tools\`）
-3. 将该目录添加到系统 `PATH` 环境变量
+3. 将该目录添加到用户 `PATH` 环境变量
+
+</details>
 
 ## 第二步：初始化配置
 
