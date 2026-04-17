@@ -35,7 +35,7 @@
 ### macOS / Linux（一键安装）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh | sudo bash
 ```
 
 > v0.4.0 起不再需要 `sudo` 安装脚本。安装后，`init` 步骤会在需要时弹出系统授权对话框。
