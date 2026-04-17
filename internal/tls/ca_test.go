@@ -7,9 +7,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -102,6 +104,93 @@ func TestGenerateServerCert_BasicConstraints(t *testing.T) {
 	if !found {
 		t.Error("expected example.com in DNSNames")
 	}
+}
+
+func TestInstallCAWindows(t *testing.T) {
+	origGOOS := currentGOOS
+	origExecCombinedOutput := execCombinedOutput
+	t.Cleanup(func() {
+		currentGOOS = origGOOS
+		execCombinedOutput = origExecCombinedOutput
+	})
+
+	currentGOOS = "windows"
+
+	t.Run("install command failure includes output", func(t *testing.T) {
+		execCombinedOutput = func(name string, args ...string) ([]byte, error) {
+			if name != "certutil" {
+				t.Fatalf("unexpected command %q", name)
+			}
+			if len(args) != 4 || args[0] != "-addstore" || args[2] != "ROOT" {
+				t.Fatalf("unexpected args: %#v", args)
+			}
+			return []byte("Access is denied."), errors.New("exit status 1")
+		}
+
+		err := InstallCA(`C:\Users\Alice\.config\trae-proxy\ca\root-ca.pem`)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "Access is denied.") {
+			t.Fatalf("expected command output in error, got %v", err)
+		}
+	})
+
+	t.Run("verification failure after successful install", func(t *testing.T) {
+		call := 0
+		execCombinedOutput = func(name string, args ...string) ([]byte, error) {
+			call++
+			if name != "certutil" {
+				t.Fatalf("unexpected command %q", name)
+			}
+			switch call {
+			case 1:
+				if len(args) != 4 || args[0] != "-addstore" {
+					t.Fatalf("unexpected install args: %#v", args)
+				}
+				return []byte("CertUtil: -addstore command completed successfully."), nil
+			case 2:
+				if len(args) != 3 || args[0] != "-store" || args[2] != rootCACommonName {
+					t.Fatalf("unexpected verify args: %#v", args)
+				}
+				return []byte("CertUtil: -store command completed successfully."), nil
+			default:
+				t.Fatalf("unexpected extra call %d", call)
+				return nil, nil
+			}
+		}
+
+		err := InstallCA(`C:\Users\Alice\.config\trae-proxy\ca\root-ca.pem`)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Fatalf("expected verification failure, got %v", err)
+		}
+	})
+
+	t.Run("success when installed cert is present in ROOT store", func(t *testing.T) {
+		call := 0
+		execCombinedOutput = func(name string, args ...string) ([]byte, error) {
+			call++
+			if name != "certutil" {
+				t.Fatalf("unexpected command %q", name)
+			}
+			switch call {
+			case 1:
+				return []byte("CertUtil: -addstore command completed successfully."), nil
+			case 2:
+				return []byte("Subject: CN=trae-proxy Root CA"), nil
+			default:
+				t.Fatalf("unexpected extra call %d", call)
+				return nil, nil
+			}
+		}
+
+		if err := InstallCA(`C:\Users\Alice\.config\trae-proxy\ca\root-ca.pem`); err != nil {
+			t.Fatalf("InstallCA: %v", err)
+		}
+	})
 }
 
 // mustWriteCustomCert writes a server cert with arbitrary validity to dir/server.pem.
