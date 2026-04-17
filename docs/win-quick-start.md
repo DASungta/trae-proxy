@@ -15,7 +15,7 @@
 
 ## 第一步：一键安装 trae-proxy
 
-在普通用户权限的 PowerShell 中运行：
+在管理员权限的 PowerShell 中运行：
 
 ```powershell
 irm https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.ps1 | iex
@@ -34,8 +34,6 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 - 校验 SHA256 完整性
 - 安装到 `%LOCALAPPDATA%\trae-proxy\trae-proxy.exe`
 - 将安装目录写入当前用户 PATH
-
-安装脚本本身**不需要管理员权限**。若当前窗口仍提示找不到 `trae-proxy`，请关闭并重新打开 PowerShell。
 
 <details>
 <summary>手动安装（备用方案）</summary>
