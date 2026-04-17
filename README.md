@@ -58,6 +58,14 @@ curl -fsSL https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.sh
 
 </details>
 
+### Windwos (一键安装)
+
+在管理员权限的 PowerShell 中运行：
+
+```powershell
+irm https://raw.githubusercontent.com/DASungta/trae-proxy/main/install.ps1 | iex
+```
+
 ### Windows（手动安装）
 
 1. 从 [Releases](https://github.com/DASungta/trae-proxy/releases/latest) 页面下载 `trae-proxy-windows-amd64.exe`
