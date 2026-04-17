@@ -159,8 +159,13 @@ func NeedsRegeneration(dir string, domain string) bool {
 func InstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return elevatedExec("security", "add-trusted-cert", "-d", "-r", "trustRoot",
-			"-k", "/Library/Keychains/System.keychain", caCertPath)
+		// Install into the user login keychain — no admin privileges required.
+		// Omitting -d and -k /Library/Keychains/System.keychain avoids the
+		// SecTrustSettingsSetTrustSettings authorization error on macOS 15+.
+		cmd := exec.Command("security", "add-trusted-cert", "-r", "trustRoot", caCertPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	case "linux":
 		dest := "/usr/local/share/ca-certificates/trae-proxy.crt"
 		if err := elevatedExec("cp", caCertPath, dest); err != nil {
@@ -177,7 +182,10 @@ func InstallCA(caCertPath string) error {
 func UninstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return elevatedExec("security", "remove-trusted-cert", "-d", caCertPath)
+		cmd := exec.Command("security", "remove-trusted-cert", caCertPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	case "linux":
 		elevatedExec("rm", "-f", "/usr/local/share/ca-certificates/trae-proxy.crt")
 		return elevatedExec("update-ca-certificates", "--fresh")
