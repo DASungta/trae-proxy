@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,9 @@ import (
 )
 
 const rootCACommonName = "trae-proxy Root CA"
+
+// certProfileVersion is stamped as Subject.OrganizationalUnit to enable migration detection.
+const certProfileVersion = "v2"
 
 var (
 	currentGOOS        = runtime.GOOS
@@ -37,14 +41,19 @@ func GenerateCA(dir string) error {
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			Organization: []string{"trae-proxy"},
-			CommonName:   rootCACommonName,
+			Organization:       []string{"trae-proxy"},
+			OrganizationalUnit: []string{certProfileVersion},
+			CommonName:         rootCACommonName,
 		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(10 * 365 * 24 * time.Hour),
+		// KeyUsageCertSign only — omitting CRLSign so Schannel does not expect
+		// a CRL Distribution Point and fail with CRYPT_E_NO_REVOCATION_CHECK.
+		KeyUsage:              x509.KeyUsageCertSign,
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
 	}
 
 	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
@@ -103,14 +112,19 @@ func GenerateServerCert(dir string, caCert *x509.Certificate, caKey *ecdsa.Priva
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
 		Subject: pkix.Name{
-			Organization: []string{"trae-proxy"},
-			CommonName:   domain,
+			Organization:       []string{"trae-proxy"},
+			OrganizationalUnit: []string{certProfileVersion},
+			CommonName:         domain,
 		},
-		DNSNames:              []string{domain},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:  []string{domain},
+		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(365 * 24 * time.Hour),
+		// KeyEncipherment is required by strict Schannel / older TLS stacks even
+		// when using ECDSA (ECDHE never uses encryption, but some validators still check).
+		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		// ClientAuth is included for maximum compatibility; it does not affect server role.
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  false,
 	}
@@ -131,6 +145,9 @@ func GenerateServerCert(dir string, caCert *x509.Certificate, caKey *ecdsa.Priva
 	return writePEM(filepath.Join(dir, "server-key.pem"), "EC PRIVATE KEY", keyDER)
 }
 
+// LoadServerTLSConfig loads the server cert and appends the CA cert to the
+// TLS chain so clients (Schannel, Chromium) can build the chain deterministically
+// without relying solely on AKI lookup in the system trust store.
 func LoadServerTLSConfig(dir string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(
 		filepath.Join(dir, "server.pem"),
@@ -139,11 +156,25 @@ func LoadServerTLSConfig(dir string) (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	caPEM, err := os.ReadFile(filepath.Join(dir, "root-ca.pem"))
+	if err != nil {
+		return nil, fmt.Errorf("read CA cert for chain: %w", err)
+	}
+	block, _ := pem.Decode(caPEM)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode CA cert PEM for chain")
+	}
+	cert.Certificate = append(cert.Certificate, block.Bytes)
+
 	return &tls.Config{
 		Certificates: []tls.Certificate{cert},
 	}, nil
 }
 
+// NeedsRegeneration reports whether the server cert should be re-issued.
+// Returns true for missing/unreadable certs, expiring certs, domain mismatches,
+// and legacy v1 profile certs (missing KeyEncipherment or OU version marker).
 func NeedsRegeneration(dir string, domain string) bool {
 	certPEM, err := os.ReadFile(filepath.Join(dir, "server.pem"))
 	if err != nil {
@@ -163,12 +194,52 @@ func NeedsRegeneration(dir string, domain string) bool {
 	if cert.NotAfter.Sub(cert.NotBefore) > 398*24*time.Hour {
 		return true
 	}
+	if cert.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
+		return true // legacy v1 profile
+	}
+	if !containsOU(cert.Subject.OrganizationalUnit, certProfileVersion) {
+		return true // legacy v1 profile
+	}
 	for _, name := range cert.DNSNames {
 		if name == domain {
 			return false
 		}
 	}
 	return true
+}
+
+// CANeedsRegeneration reports whether the root CA should be re-generated.
+// Returns true for missing/unreadable CA files and legacy v1 profile CAs
+// (those with CRLSign bit or missing OU version marker).
+func CANeedsRegeneration(dir string) bool {
+	caPEM, err := os.ReadFile(filepath.Join(dir, "root-ca.pem"))
+	if err != nil {
+		return true
+	}
+	block, _ := pem.Decode(caPEM)
+	if block == nil {
+		return true
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return true
+	}
+	if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
+		return true // legacy v1 profile — CRLSign triggers Schannel revocation check
+	}
+	if !containsOU(cert.Subject.OrganizationalUnit, certProfileVersion) {
+		return true // legacy v1 profile
+	}
+	return false
+}
+
+func containsOU(ous []string, target string) bool {
+	for _, ou := range ous {
+		if ou == target {
+			return true
+		}
+	}
+	return false
 }
 
 func InstallCA(caCertPath string) error {

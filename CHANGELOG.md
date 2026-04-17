@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.8] - 2026-04-17
+
+### Bug Fixes
+
+- **Windows 10 证书信任修复（Issue #9 后续）**：v0.4.7 修复了安装校验，但证书 profile 与 Windows 10 Schannel / Chromium 130 的严格校验不兼容，导致 `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` 及 TLS 握手 `EOF`。本次重写证书 profile 至"v2"标准：
+  - **CA 证书**：去掉 `KeyUsageCRLSign`（该位声明 CRL 能力却无 CDP 扩展，正是 Schannel 触发吊销校验的根因）；添加 `MaxPathLen=0, MaxPathLenZero=true`，防止被继续用于签发中间 CA。
+  - **服务器证书**：补充 `KeyUsageKeyEncipherment`（旧版 Schannel/TLS 栈仍要求此位）；`ExtKeyUsage` 加入 `ClientAuth`（最大兼容性）；`IPAddresses` 加入 `127.0.0.1`（覆盖 Electron 代理路径用 IP SNI 的场景）。
+  - **TLS 握手链**：服务端在握手时主动发送"叶子 + CA"完整链，Schannel/Chromium 无需依赖 ROOT 存储 AKI 匹配来构建链。
+
+### Migration
+
+- **自动迁移旧 CA**：`trae-proxy init` 在检测到 v0.4.7 及更早版本生成的旧 profile CA（有 `CRLSign` 位或缺少 v2 版本标记）时，自动执行：卸载旧 CA 信任 → 删除旧证书文件 → 重新生成 v2 profile CA 和服务器证书 → 重新安装信任。用户只需执行 `trae-proxy update && trae-proxy init` 即可完成迁移，无需任何手动操作。
+
+---
+
 ## [v0.4.7] - 2026-04-17
 
 ### Features

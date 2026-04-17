@@ -133,6 +133,16 @@ func initCmd() *cobra.Command {
 				if err := tlsutil.GenerateCA(caDir); err != nil {
 					return fmt.Errorf("generate CA: %w", err)
 				}
+			} else if tlsutil.CANeedsRegeneration(caDir) {
+				fmt.Println("[init] detected legacy CA profile (v0.4.7 or earlier), regenerating for Windows 10 compatibility...")
+				caCertPath := filepath.Join(caDir, "root-ca.pem")
+				_ = tlsutil.UninstallCA(caCertPath) // best-effort: remove old trust entry
+				for _, f := range []string{"root-ca.pem", "root-ca-key.pem", "server.pem", "server-key.pem"} {
+					os.Remove(filepath.Join(caDir, f))
+				}
+				if err := tlsutil.GenerateCA(caDir); err != nil {
+					return fmt.Errorf("generate CA: %w", err)
+				}
 			} else {
 				fmt.Println("[init] CA already exists")
 			}
