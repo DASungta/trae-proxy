@@ -158,6 +158,10 @@ func initCmd() *cobra.Command {
 				fmt.Printf("[init] WARNING: failed to install CA: %v\n", err)
 				if runtime.GOOS == "darwin" {
 					fmt.Printf("[init] 可手动执行：sudo security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain %s\n", caPath)
+				} else if runtime.GOOS == "windows" {
+					fmt.Println("[init] 请确认当前窗口为管理员 PowerShell。")
+					fmt.Printf("[init] 可手动执行：certutil -addstore -f ROOT \"%s\"\n", caPath)
+					fmt.Println("[init] 安装后验证：certutil -store ROOT \"trae-proxy Root CA\"")
 				} else {
 					fmt.Println("[init] you may need to manually trust the CA")
 				}

@@ -14,7 +14,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
+)
+
+const rootCACommonName = "trae-proxy Root CA"
+
+var (
+	currentGOOS        = runtime.GOOS
+	execCombinedOutput = func(name string, args ...string) ([]byte, error) {
+		return exec.Command(name, args...).CombinedOutput()
+	}
 )
 
 func GenerateCA(dir string) error {
@@ -28,7 +38,7 @@ func GenerateCA(dir string) error {
 		SerialNumber: serial,
 		Subject: pkix.Name{
 			Organization: []string{"trae-proxy"},
-			CommonName:   "trae-proxy Root CA",
+			CommonName:   rootCACommonName,
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
@@ -162,7 +172,7 @@ func NeedsRegeneration(dir string, domain string) bool {
 }
 
 func InstallCA(caCertPath string) error {
-	switch runtime.GOOS {
+	switch currentGOOS {
 	case "darwin":
 		// macOS 15+/26: SecTrustSettingsSetTrustSettings requires an interactive user session.
 		// osascript "with administrator privileges" cannot satisfy this (errAuthorizationInteractionNotAllowed).
@@ -184,14 +194,26 @@ func InstallCA(caCertPath string) error {
 		}
 		return elevatedExec("update-ca-certificates")
 	case "windows":
-		return exec.Command("certutil", "-addstore", "-f", "ROOT", caCertPath).Run()
+		output, err := runCommandCombined("certutil", "-addstore", "-f", "ROOT", caCertPath)
+		if err != nil {
+			return formatCommandError("install CA with certutil", err, output)
+		}
+
+		installed, verifyOutput, err := windowsRootCAInstalled(rootCACommonName)
+		if err != nil {
+			return formatCommandError("verify CA in Windows ROOT store", err, []byte(verifyOutput))
+		}
+		if !installed {
+			return fmt.Errorf("verify CA in Windows ROOT store: %s not found: %s", rootCACommonName, summarizeCommandOutput([]byte(verifyOutput)))
+		}
+		return nil
 	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+		return fmt.Errorf("unsupported OS: %s", currentGOOS)
 	}
 }
 
 func UninstallCA(caCertPath string) error {
-	switch runtime.GOOS {
+	switch currentGOOS {
 	case "darwin":
 		cmd := exec.Command("sudo", "security", "remove-trusted-cert", "-d", caCertPath)
 		cmd.Stdin = os.Stdin
@@ -202,14 +224,14 @@ func UninstallCA(caCertPath string) error {
 		elevatedExec("rm", "-f", "/usr/local/share/ca-certificates/trae-proxy.crt")
 		return elevatedExec("update-ca-certificates", "--fresh")
 	case "windows":
-		return exec.Command("certutil", "-delstore", "ROOT", "trae-proxy Root CA").Run()
+		return exec.Command("certutil", "-delstore", "ROOT", rootCACommonName).Run()
 	default:
-		return fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+		return fmt.Errorf("unsupported OS: %s", currentGOOS)
 	}
 }
 
 func elevatedExec(name string, args ...string) error {
-	if runtime.GOOS == "windows" {
+	if currentGOOS == "windows" {
 		return exec.Command(name, args...).Run()
 	}
 	cmdArgs := append([]string{name}, args...)
@@ -227,4 +249,33 @@ func writePEM(path string, blockType string, data []byte) error {
 	}
 	defer f.Close()
 	return pem.Encode(f, &pem.Block{Type: blockType, Bytes: data})
+}
+
+func runCommandCombined(name string, args ...string) ([]byte, error) {
+	return execCombinedOutput(name, args...)
+}
+
+func windowsRootCAInstalled(commonName string) (bool, string, error) {
+	output, err := runCommandCombined("certutil", "-store", "ROOT", commonName)
+	text := strings.TrimSpace(string(output))
+	if err != nil {
+		return false, text, err
+	}
+	return strings.Contains(strings.ToLower(text), strings.ToLower(commonName)), text, nil
+}
+
+func formatCommandError(action string, err error, output []byte) error {
+	summary := summarizeCommandOutput(output)
+	if summary == "no command output" {
+		return fmt.Errorf("%s: %w", action, err)
+	}
+	return fmt.Errorf("%s: %w: %s", action, err, summary)
+}
+
+func summarizeCommandOutput(output []byte) string {
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return "no command output"
+	}
+	return text
 }

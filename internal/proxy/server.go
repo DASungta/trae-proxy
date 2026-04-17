@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -13,13 +14,25 @@ import (
 	"github.com/zhangyc/trae-proxy/internal/logging"
 )
 
-
 type Server struct {
 	Config       *config.Config
 	Logger       *logging.Logger
 	HTTPClient   *http.Client
 	BypassClient *http.Client // uses public DNS (1.1.1.1), ignores /etc/hosts
 	TLSConfig    *tls.Config
+}
+
+type serverErrorLogWriter struct {
+	logger *logging.Logger
+}
+
+func (w *serverErrorLogWriter) Write(p []byte) (int, error) {
+	trimmed := strings.TrimSpace(string(p))
+	if trimmed == "" {
+		return len(p), nil
+	}
+	w.logger.Warn("server error", "msg", trimmed)
+	return len(p), nil
 }
 
 func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
@@ -106,8 +119,9 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	srv := &http.Server{
-		Addr:    s.Config.Listen,
-		Handler: s.Handler(),
+		Addr:     s.Config.Listen,
+		Handler:  s.Handler(),
+		ErrorLog: log.New(&serverErrorLogWriter{logger: s.Logger}, "", 0),
 		// ReadHeaderTimeout 防止 slowloris 攻击（慢速发送请求头）
 		ReadHeaderTimeout: 10 * time.Second,
 		// ReadTimeout 覆盖读取完整请求（header + body）的最大时长
