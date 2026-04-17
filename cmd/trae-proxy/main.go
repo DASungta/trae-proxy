@@ -322,7 +322,13 @@ func uninstallCmd() *cobra.Command {
 			if err == nil {
 				fmt.Printf("[uninstall] removing binary %s...\n", exePath)
 				if err := os.Remove(exePath); err != nil {
-					fmt.Printf("[uninstall] WARNING: could not remove binary: %v\n", err)
+					if os.IsPermission(err) {
+						if err2 := removePrivileged(exePath); err2 != nil {
+							fmt.Printf("[uninstall] WARNING: could not remove binary: %v\n", err2)
+						}
+					} else {
+						fmt.Printf("[uninstall] WARNING: could not remove binary: %v\n", err)
+					}
 				}
 			}
 
@@ -730,6 +736,21 @@ func darwinUninstallPrivileged(caCertPath string) error {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func removePrivileged(path string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return privilege.RunPrivileged("rm -f " + shellQuote(path))
+	case "linux":
+		cmd := exec.Command("sudo", "rm", "-f", path)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	default:
+		return exec.Command("cmd", "/C", "del", "/F", path).Run()
+	}
 }
 
 func findPort443Process() int {
