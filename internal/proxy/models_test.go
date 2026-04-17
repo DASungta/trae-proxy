@@ -45,3 +45,54 @@ func TestServeFakeModelsOpenRouterFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestServeFakeModelsDefaultConfigContainsBothGenerations(t *testing.T) {
+	cfg := config.DefaultConfig()
+	s := &Server{Config: cfg}
+
+	rec := httptest.NewRecorder()
+	serveFakeModels(s, rec)
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, ok := body["data"].([]interface{})
+	if !ok {
+		t.Fatalf("data field missing: %#v", body["data"])
+	}
+
+	ids := make(map[string]bool, len(data))
+	for _, raw := range data {
+		if m, ok := raw.(map[string]interface{}); ok {
+			if id, ok := m["id"].(string); ok {
+				ids[id] = true
+			}
+		}
+	}
+
+	// 新模型（海外版）
+	mustContain := []string{
+		"anthropic/claude-sonnet-4.6",
+		"anthropic/claude-opus-4.6",
+		"openai/gpt-5.4",
+	}
+	// 老模型（国内版）
+	mustContain = append(mustContain,
+		"anthropic/claude-sonnet-4.5",
+		"anthropic/claude-3.7-sonnet",
+		"google/gemini-3-pro-preview",
+		"openai/gpt-5",
+		"qwen/qwen3-coder",
+	)
+
+	for _, id := range mustContain {
+		if !ids[id] {
+			t.Errorf("missing expected model id %q in /v1/models response", id)
+		}
+	}
+
+	if len(data) < 23 {
+		t.Errorf("expected at least 23 models, got %d", len(data))
+	}
+}

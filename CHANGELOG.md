@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.5] - 2026-04-17
+
+### Bug Fixes
+
+- **macOS 26 init 仍报 SecTrustSettingsSetTrustSettings 授权失败**：v0.4.3 的 `InstallCA` 通过 osascript "with administrator privileges" 调用 `security add-trusted-cert`，但 macOS 15+/26 的 Authorization Services 在 `SecTrustSettingsSetTrustSettings` 写入系统域 trust setting 时需要再次出示用户交互式授权对话框——osascript 子进程无用户会话上下文，无法满足此要求（`errAuthorizationInteractionNotAllowed -60007`）。改为直接 `sudo security add-trusted-cert/remove-trusted-cert`，由用户在终端输入登录密码，Authorization Services 可复用 sudo 的授权会话。
+
+### Features
+
+- **兼容国内版 Trae 老模型**：`DefaultConfig().Models` 新增 12 个国内版 Trae 仍在使用的老模型 id（`anthropic/claude-sonnet-4.5`、`claude-3.7-sonnet`、`openai/gpt-5`、`google/gemini-3-pro-preview` 等），同时修正旧版拼写错误 `gemini-3-pro-perview → gemini-3-pro-preview`。`/v1/models` fake 数据现在同时返回 11 个新模型（海外版 Trae）和 12 个老模型（国内版 Trae）共 23 个 id。
+- **`writeDefaultConfig` 去硬编码**：从 `DefaultConfig().Models` 动态生成 `[models]` 配置块（按 key 排序），消除与 `DefaultConfig` 的同步漂移风险。
+
+---
+
 ## [v0.4.4] - 2026-04-17
 
 ### Bug Fixes

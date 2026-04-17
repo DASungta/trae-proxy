@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -150,7 +151,7 @@ func initCmd() *cobra.Command {
 
 			fmt.Println("[init] installing CA to system trust store (may prompt for password)...")
 			if runtime.GOOS == "darwin" {
-				fmt.Println("[init] 需要系统权限安装 CA 证书，即将弹出系统授权对话框...")
+				fmt.Println("[init] 安装 CA 到系统信任库需要 sudo 权限，请按提示输入登录密码...")
 			}
 			caPath := filepath.Join(caDir, "root-ca.pem")
 			if err := tlsutil.InstallCA(caPath); err != nil {
@@ -447,10 +448,10 @@ func updateCmd() *cobra.Command {
 }
 
 func writeDefaultConfig(path string, cfg *config.Config) error {
-	content := fmt.Sprintf(`# trae-proxy configuration
+	header := fmt.Sprintf(`# trae-proxy configuration
 
 # Upstream API address
-# 上游服务地址，路径不要包含/v1/messages或/v1/chat/completions
+# 上游服务地址，路径支持完整地址或基地址
 # 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
 # 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
 # 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
@@ -487,20 +488,20 @@ log_body = false
 # 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
 # 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
-"anthropic/claude-opus-4.1" = "claude-opus-4.6"
-"anthropic/claude-4-sonnet" = ""
-"anthropic/claude-4-opus" = ""
-"anthropic/claude-3.7-sonnet" = ""
-"openai/gpt-5" = "gpt-5.4"
-"openai/gpt-4.1" = ""
-"openai/gpt-4o" = ""
-"google/gemini-3-pro-perview" = ""
-"google/gemini-2.5-pro" = ""
-"minimax/minimax-m2" = ""
-"qwen/qwen3-coder" = ""
 `, cfg.Upstream, cfg.Listen, cfg.Hijack)
-	return os.WriteFile(path, []byte(content), 0644)
+
+	keys := make([]string, 0, len(cfg.Models))
+	for k := range cfg.Models {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var modelsBlock strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&modelsBlock, "%q = %q\n", k, cfg.Models[k])
+	}
+
+	return os.WriteFile(path, []byte(header+modelsBlock.String()), 0644)
 }
 
 func bindStartFlags(cmd *cobra.Command, opts *startOptions, includeDaemon bool) {

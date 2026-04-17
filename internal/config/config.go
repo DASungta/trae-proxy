@@ -42,6 +42,7 @@ func DefaultConfig() *Config {
 		LogLevel:         "info",
 		LogBody:          false,
 		Models: map[string]string{
+			// 海外版 Trae 当前展示的最新模型
 			"anthropic/claude-sonnet-4.6":          "claude-sonnet-4.6",
 			"anthropic/claude-opus-4.6":            "claude-opus-4.6",
 			"anthropic/claude-haiku-4.5":           "",
@@ -53,6 +54,19 @@ func DefaultConfig() *Config {
 			"minimax/minimax-m2.7":                 "",
 			"qwen/qwen3-coder-next":                "",
 			"z-ai/glm-5":                           "",
+			// 国内版 Trae 仍展示的老模型
+			"anthropic/claude-sonnet-4.5": "claude-sonnet-4.6",
+			"anthropic/claude-opus-4.1":   "claude-opus-4.6",
+			"anthropic/claude-4-sonnet":   "claude-sonnet-4.6",
+			"anthropic/claude-4-opus":     "claude-opus-4.6",
+			"anthropic/claude-3.7-sonnet": "claude-sonnet-4.6",
+			"openai/gpt-5":                "gpt-5.4",
+			"openai/gpt-4.1":              "gpt-5.4-mini",
+			"openai/gpt-4o":               "gpt-5.4-mini",
+			"google/gemini-3-pro-preview": "",
+			"google/gemini-2.5-pro":       "",
+			"minimax/minimax-m2":          "",
+			"qwen/qwen3-coder":            "",
 		},
 	}
 }

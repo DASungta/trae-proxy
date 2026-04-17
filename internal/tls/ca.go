@@ -14,10 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
-
-	"github.com/zhangyc/trae-proxy/internal/privilege"
 )
 
 func GenerateCA(dir string) error {
@@ -167,15 +164,19 @@ func NeedsRegeneration(dir string, domain string) bool {
 func InstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS 14/15/26: Network.framework / ATS / CFNetwork 不认可仅在 user login keychain
-		// 的自签根锚点（Electron / hardened-runtime 进程尤为严格）。必须写入系统 keychain。
-		// -p ssl 限定 trust 策略为 SSL，符合 Apple macOS 15+ 指引。
-		return elevatedExec("security", "add-trusted-cert",
+		// macOS 15+/26: SecTrustSettingsSetTrustSettings requires an interactive user session.
+		// osascript "with administrator privileges" cannot satisfy this (errAuthorizationInteractionNotAllowed).
+		// Using sudo lets security reuse the terminal's authorization session directly.
+		cmd := exec.Command("sudo", "security", "add-trusted-cert",
 			"-d",
 			"-r", "trustRoot",
 			"-p", "ssl",
 			"-k", "/Library/Keychains/System.keychain",
 			caCertPath)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	case "linux":
 		dest := "/usr/local/share/ca-certificates/trae-proxy.crt"
 		if err := elevatedExec("cp", caCertPath, dest); err != nil {
@@ -192,7 +193,11 @@ func InstallCA(caCertPath string) error {
 func UninstallCA(caCertPath string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return elevatedExec("security", "remove-trusted-cert", "-d", caCertPath)
+		cmd := exec.Command("sudo", "security", "remove-trusted-cert", "-d", caCertPath)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
 	case "linux":
 		elevatedExec("rm", "-f", "/usr/local/share/ca-certificates/trae-proxy.crt")
 		return elevatedExec("update-ca-certificates", "--fresh")
@@ -204,14 +209,6 @@ func UninstallCA(caCertPath string) error {
 }
 
 func elevatedExec(name string, args ...string) error {
-	if runtime.GOOS == "darwin" {
-		parts := append([]string{name}, args...)
-		escaped := make([]string, len(parts))
-		for i, p := range parts {
-			escaped[i] = shellQuote(p)
-		}
-		return privilege.RunPrivileged(strings.Join(escaped, " "))
-	}
 	if runtime.GOOS == "windows" {
 		return exec.Command(name, args...).Run()
 	}
@@ -221,10 +218,6 @@ func elevatedExec(name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 func writePEM(path string, blockType string, data []byte) error {
