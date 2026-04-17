@@ -9,7 +9,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -80,11 +79,17 @@ func main() {
 
 func initCmd() *cobra.Command {
 	var yes bool
+	var yuanxinMythos bool
+	var yuanxinGPT bool
 
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Generate CA, install trust, create default config",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if yuanxinMythos && yuanxinGPT {
+				return fmt.Errorf("flags --yuanxin-mythos and --yuanxin-gpt are mutually exclusive")
+			}
+
 			// Clean up any stale /etc/hosts entries left by a previously crashed/killed
 			// start process (signal handler only fires on SIGINT/SIGTERM, not SIGKILL).
 			if _, running := daemon.IsRunning(); !running {
@@ -107,12 +112,22 @@ func initCmd() *cobra.Command {
 
 			configPath := filepath.Join(dir, "config.toml")
 			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				interactive := !yes && isTerminal(os.Stdin)
-				if interactive {
+				switch {
+				case yuanxinMythos:
+					fmt.Printf("[init] generating config at %s\n", configPath)
+					if err := writeYuanxinConfig(configPath, "anthropic"); err != nil {
+						return err
+					}
+				case yuanxinGPT:
+					fmt.Printf("[init] generating config at %s\n", configPath)
+					if err := writeYuanxinConfig(configPath, "openai"); err != nil {
+						return err
+					}
+				case !yes && isTerminal(os.Stdin):
 					if err := runWizard(configPath, os.Stdin, os.Stdout); err != nil {
 						return fmt.Errorf("wizard: %w", err)
 					}
-				} else {
+				default:
 					src, err := os.ReadFile("config.example.toml")
 					if err != nil {
 						cfg := config.DefaultConfig()
@@ -187,6 +202,10 @@ func initCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip interactive wizard and use default config")
+	cmd.Flags().BoolVar(&yuanxinMythos, "yuanxin-mythos", false, "")
+	cmd.Flags().BoolVar(&yuanxinGPT, "yuanxin-gpt", false, "")
+	_ = cmd.Flags().MarkHidden("yuanxin-mythos")
+	_ = cmd.Flags().MarkHidden("yuanxin-gpt")
 	return cmd
 }
 
@@ -198,7 +217,13 @@ func startCmd() *cobra.Command {
 		Short: "Start the proxy (adds hosts entry, starts HTTPS server)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.daemonMode {
+				if pid, running := daemonIsRunning(); running {
+					return fmt.Errorf("[start] already running as daemon (pid %d), use 'trae-proxy stop' first", pid)
+				}
 				return daemonStart(opts.daemonArgs())
+			}
+			if pid := findPort443Process(); pid > 0 {
+				return fmt.Errorf("[start] port 443 already in use (pid %d)", pid)
 			}
 
 			return runProxy(opts)
@@ -462,60 +487,7 @@ func updateCmd() *cobra.Command {
 }
 
 func writeDefaultConfig(path string, cfg *config.Config) error {
-	header := fmt.Sprintf(`# trae-proxy configuration
-
-# Upstream API address
-# 上游服务地址，路径支持完整地址或基地址
-# 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
-# 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
-# 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
-# 示例：- sub2api：直接填端点地址
-upstream = "%s"
-
-# Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
-# conversion. "openai" directly forwards OpenAI Chat Completions — use this when
-# upstream is OpenAI-compatible (LM Studio, Ollama, most relays).
-# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
-upstream_protocol = "anthropic"
-
-# HTTPS listen address
-listen = "%s"
-
-# Domain to hijack via /etc/hosts
-hijack = "%s"
-
-# Log level: error | warn | info (default) | debug | trace
-# trace adds four tap points per request: client body, proxy internal form,
-# upstream payload, upstream response. Authorization/x-api-key are always redacted.
-log_level = "info"
-
-# When true, the trace level prints full request/response bodies.
-# Leave false unless debugging payloads — bodies may contain API keys / secrets.
-log_body = false
-
-# When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
-# instead of returning the fake list from [models] below.
-# real_models = false
-
-# Model mapping: request model name → upstream model name
-# 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
-# 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
-# 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
-[models]
-`, cfg.Upstream, cfg.Listen, cfg.Hijack)
-
-	keys := make([]string, 0, len(cfg.Models))
-	for k := range cfg.Models {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var modelsBlock strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&modelsBlock, "%q = %q\n", k, cfg.Models[k])
-	}
-
-	return os.WriteFile(path, []byte(header+modelsBlock.String()), 0644)
+	return writeConfigFile(path, cfg)
 }
 
 func bindStartFlags(cmd *cobra.Command, opts *startOptions, includeDaemon bool) {

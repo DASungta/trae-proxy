@@ -156,71 +156,14 @@ func promptUpstreamModel(scanner *bufio.Scanner, out io.Writer, selectedModel st
 }
 
 func writeWizardConfig(path, upstream, protocol, selectedModel, upstreamModel string) error {
-	var b strings.Builder
-	b.WriteString(`# trae-proxy configuration
-
-# Upstream API address
-# 上游服务地址，支持填写基础地址或完整端点 URL（两种方式均可）
-# 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
-# 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
-# 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
-# 示例：- 百度千帆：OpenAI：https://qianfan.baidubce.com/v2/coding
-#                           或 https://qianfan.baidubce.com/v2/coding/chat/completions
-# 示例：- 百度千帆：Anthropic：https://qianfan.baidubce.com/anthropic/coding
-#                              或 https://qianfan.baidubce.com/anthropic/coding/v1/messages
-# 示例：- sub2api：直接填端点地址
-`)
-	fmt.Fprintf(&b, "upstream = %q\n", upstream)
-	b.WriteString(`
-# Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
-# conversion. "openai" directly forwards OpenAI Chat Completions — use this when
-# upstream is OpenAI-compatible (LM Studio, Ollama, most relays).
-# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
-`)
-	fmt.Fprintf(&b, "upstream_protocol = %q\n", protocol)
-	b.WriteString(`
-# HTTPS listen address
-listen = ":443"
-
-# Domain to hijack via /etc/hosts
-hijack = "openrouter.ai"
-
-# Log level: error | warn | info (default) | debug | trace
-log_level = "info"
-
-# When true, the trace level prints full request/response bodies.
-log_body = false
-
-# When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
-# instead of returning the fake list from [models] below.
-# real_models = false
-
-# Model mapping: request model name → upstream model name
-# 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
-# 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
-# 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
-[models]
-`)
-	models := openRouterModels()
-	customModel := true
-	for _, m := range models {
-		if m == selectedModel {
-			customModel = false
-			break
-		}
+	cfg := config.DefaultConfig()
+	cfg.Upstream = upstream
+	cfg.UpstreamProtocol = protocol
+	for k := range cfg.Models {
+		cfg.Models[k] = ""
 	}
-	if customModel {
-		fmt.Fprintf(&b, "%q = %q\n", selectedModel, upstreamModel)
-	}
-	for _, m := range models {
-		if m == selectedModel {
-			fmt.Fprintf(&b, "%q = %q\n", m, upstreamModel)
-		} else {
-			fmt.Fprintf(&b, "%q = \"\"\n", m)
-		}
-	}
-
-	return os.WriteFile(path, []byte(b.String()), 0644)
+	cfg.Models[selectedModel] = upstreamModel
+	return writeConfigFile(path, cfg)
 }
 
 func isTerminal(f *os.File) bool {

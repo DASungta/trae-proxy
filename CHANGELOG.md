@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.9] - 2026-04-18
+
+### Bug Fixes
+
+- **`start -d` 重复启动误报修复**：守护进程父进程在 fork 前写入 PID 文件，子进程（实际 daemon）启动时会读到自身 PID 并误判为"已在运行"，导致 `stop` 后无法再次 `start -d`。将存活检测移至父进程 fork 前执行，子进程不再触发该检查。
+
+### Improvements
+
+- **`init` 配置文件模型分组**：`[models]` 区块按"海外版（新模型）"和"国内版（旧模型）"两组分段，每组带注释，模型列表更直观易读。
+
+---
+
 ## [v0.4.8] - 2026-04-17
 
 ### Bug Fixes
