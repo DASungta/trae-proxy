@@ -16,6 +16,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 func TestGenerateCA_Profile(t *testing.T) {
@@ -259,6 +262,7 @@ func TestInstallCAWindows(t *testing.T) {
 	currentGOOS = "windows"
 
 	t.Run("install command failure includes output", func(t *testing.T) {
+		localized := mustEncodeGB18030(t, "使用这些选项需要管理员权限。")
 		execCombinedOutput = func(name string, args ...string) ([]byte, error) {
 			if name != "certutil" {
 				t.Fatalf("unexpected command %q", name)
@@ -266,14 +270,14 @@ func TestInstallCAWindows(t *testing.T) {
 			if len(args) != 4 || args[0] != "-addstore" || args[2] != "ROOT" {
 				t.Fatalf("unexpected args: %#v", args)
 			}
-			return []byte("Access is denied."), errors.New("exit status 1")
+			return localized, errors.New("exit status 1")
 		}
 
 		err := InstallCA(`C:\Users\Alice\.config\trae-proxy\ca\root-ca.pem`)
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "Access is denied.") {
+		if !strings.Contains(err.Error(), "使用这些选项需要管理员权限。") {
 			t.Fatalf("expected command output in error, got %v", err)
 		}
 	})
@@ -333,6 +337,15 @@ func TestInstallCAWindows(t *testing.T) {
 			t.Fatalf("InstallCA: %v", err)
 		}
 	})
+}
+
+func mustEncodeGB18030(t *testing.T, text string) []byte {
+	t.Helper()
+	encoded, _, err := transform.Bytes(simplifiedchinese.GB18030.NewEncoder(), []byte(text))
+	if err != nil {
+		t.Fatalf("encode GB18030: %v", err)
+	}
+	return encoded
 }
 
 // mustWriteCustomCert writes a server cert with arbitrary validity to dir/server.pem.

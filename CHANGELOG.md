@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.10] - 2026-04-19
+
+### Bug Fixes
+
+- **Windows certutil 输出乱码修复（Issue #11）**：`certutil` 在中文 Windows 系统上输出 GBK/GB18030 编码，Go 直接转 `string` 显示乱码。新增 `decodeCommandOutput` 自动识别编码：优先判断 UTF-8，其次检测 UTF-16 BOM/启发式特征，最后在 Windows 上尝试 GB18030 解码，确保错误信息以可读中文显示。
+
+---
+
 ## [v0.4.9] - 2026-04-18
 
 ### Bug Fixes
