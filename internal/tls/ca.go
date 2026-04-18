@@ -1,6 +1,7 @@
 package tlsutil
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -17,6 +18,11 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"golang.org/x/text/transform"
 )
 
 const rootCACommonName = "trae-proxy Root CA"
@@ -328,7 +334,7 @@ func runCommandCombined(name string, args ...string) ([]byte, error) {
 
 func windowsRootCAInstalled(commonName string) (bool, string, error) {
 	output, err := runCommandCombined("certutil", "-store", "ROOT", commonName)
-	text := strings.TrimSpace(string(output))
+	text := strings.TrimSpace(decodeCommandOutput(output))
 	if err != nil {
 		return false, text, err
 	}
@@ -344,9 +350,74 @@ func formatCommandError(action string, err error, output []byte) error {
 }
 
 func summarizeCommandOutput(output []byte) string {
-	text := strings.TrimSpace(string(output))
+	text := strings.TrimSpace(decodeCommandOutput(output))
 	if text == "" {
 		return "no command output"
 	}
 	return text
+}
+
+func decodeCommandOutput(output []byte) string {
+	if len(output) == 0 {
+		return ""
+	}
+	if utf8.Valid(output) {
+		return string(output)
+	}
+	if decoded, ok := decodeUTF16(output); ok {
+		return decoded
+	}
+	if currentGOOS == "windows" {
+		if decoded, _, err := transform.Bytes(simplifiedchinese.GB18030.NewDecoder(), output); err == nil && utf8.Valid(decoded) {
+			return string(decoded)
+		}
+	}
+	return string(output)
+}
+
+func decodeUTF16(output []byte) (string, bool) {
+	if len(output) < 2 {
+		return "", false
+	}
+	if bytes.HasPrefix(output, []byte{0xff, 0xfe}) {
+		return decodeUTF16Words(output[2:], true)
+	}
+	if bytes.HasPrefix(output, []byte{0xfe, 0xff}) {
+		return decodeUTF16Words(output[2:], false)
+	}
+	if !looksLikeUTF16(output) {
+		return "", false
+	}
+	return decodeUTF16Words(output, true)
+}
+
+func decodeUTF16Words(output []byte, littleEndian bool) (string, bool) {
+	if len(output) < 2 || len(output)%2 != 0 {
+		return "", false
+	}
+	words := make([]uint16, 0, len(output)/2)
+	for i := 0; i < len(output); i += 2 {
+		var w uint16
+		if littleEndian {
+			w = uint16(output[i]) | uint16(output[i+1])<<8
+		} else {
+			w = uint16(output[i])<<8 | uint16(output[i+1])
+		}
+		words = append(words, w)
+	}
+	return string(utf16.Decode(words)), true
+}
+
+func looksLikeUTF16(output []byte) bool {
+	zeroes := 0
+	sample := len(output)
+	if sample > 16 {
+		sample = 16
+	}
+	for i := 1; i < sample; i += 2 {
+		if output[i] == 0 {
+			zeroes++
+		}
+	}
+	return zeroes >= 3
 }
