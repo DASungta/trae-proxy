@@ -1,5 +1,7 @@
 # Trae Proxy
 
+> Trae现在已经支持自定义url地址接入。这个项目已经没太大意义了，仅用作研究。
+
 让 Trae 接入任意 Anthropic 或 OpenAI 兼容的自定义模型端点。
 
 **特点：**
