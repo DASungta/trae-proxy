@@ -197,21 +197,28 @@ func TestWriteWizardConfig(t *testing.T) {
 
 	// Verify we can parse the TOML.
 	var parsed struct {
-		Upstream         string            `toml:"upstream"`
-		UpstreamProtocol string            `toml:"upstream_protocol"`
-		Listen           string            `toml:"listen"`
-		Hijack           string            `toml:"hijack"`
-		Models           map[string]string `toml:"models"`
+		Listen    string            `toml:"listen"`
+		Hijack    string            `toml:"hijack"`
+		Models    map[string]string `toml:"models"`
+		Upstreams map[string]struct {
+			URL      string `toml:"url"`
+			Protocol string `toml:"protocol"`
+			Default  bool   `toml:"default"`
+		} `toml:"upstreams"`
 	}
 	if _, err := toml.Decode(string(data), &parsed); err != nil {
 		t.Fatalf("TOML decode: %v", err)
 	}
 
-	if parsed.Upstream != "https://api.example.com" {
-		t.Errorf("upstream = %q, want %q", parsed.Upstream, "https://api.example.com")
+	defaultUpstream := parsed.Upstreams["default"]
+	if defaultUpstream.URL != "https://api.example.com" {
+		t.Errorf("upstreams.default.url = %q, want %q", defaultUpstream.URL, "https://api.example.com")
 	}
-	if parsed.UpstreamProtocol != "openai" {
-		t.Errorf("upstream_protocol = %q, want %q", parsed.UpstreamProtocol, "openai")
+	if defaultUpstream.Protocol != "openai" {
+		t.Errorf("upstreams.default.protocol = %q, want %q", defaultUpstream.Protocol, "openai")
+	}
+	if !defaultUpstream.Default {
+		t.Errorf("upstreams.default.default = false, want true")
 	}
 	if parsed.Listen != ":443" {
 		t.Errorf("listen = %q, want %q", parsed.Listen, ":443")
@@ -259,18 +266,25 @@ func TestRunWizardE2E(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 	var parsed struct {
-		Upstream         string            `toml:"upstream"`
-		UpstreamProtocol string            `toml:"upstream_protocol"`
-		Models           map[string]string `toml:"models"`
+		Models    map[string]string `toml:"models"`
+		Upstreams map[string]struct {
+			URL      string `toml:"url"`
+			Protocol string `toml:"protocol"`
+			Default  bool   `toml:"default"`
+		} `toml:"upstreams"`
 	}
 	if _, err := toml.Decode(string(data), &parsed); err != nil {
 		t.Fatalf("TOML decode: %v", err)
 	}
-	if parsed.Upstream != "https://api.example.com" {
-		t.Errorf("upstream = %q", parsed.Upstream)
+	defaultUpstream := parsed.Upstreams["default"]
+	if defaultUpstream.URL != "https://api.example.com" {
+		t.Errorf("upstreams.default.url = %q", defaultUpstream.URL)
 	}
-	if parsed.UpstreamProtocol != "anthropic" {
-		t.Errorf("upstream_protocol = %q", parsed.UpstreamProtocol)
+	if defaultUpstream.Protocol != "anthropic" {
+		t.Errorf("upstreams.default.protocol = %q", defaultUpstream.Protocol)
+	}
+	if !defaultUpstream.Default {
+		t.Errorf("upstreams.default.default = false, want true")
 	}
 	if parsed.Models[firstModel] != "claude-sonnet-4-6" {
 		t.Errorf("models[%s] = %q, want %q", firstModel, parsed.Models[firstModel], "claude-sonnet-4-6")

@@ -22,6 +22,15 @@ var versionMigrations = map[string]migrationNote{
 		},
 		Reason: "v0.4.0 移除了 sudo 依赖，需要重新初始化权限配置。",
 	},
+	"v0.4": {
+		RequiresReinit: false,
+		Steps: []string{
+			"trae-proxy update",
+			"trae-proxy restart",
+			"如使用旧版 upstream/upstream_protocol 配置，可运行 update 后自动迁移为 [upstreams.default]",
+		},
+		Reason: "v0.5.0 引入多上游路由与 schema v3，旧配置会在升级后自动迁移。",
+	},
 }
 
 // PrintMigrationGuide prints migration steps if upgrading from oldVersion to newVersion

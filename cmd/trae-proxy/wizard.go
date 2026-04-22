@@ -159,10 +159,17 @@ func writeWizardConfig(path, upstream, protocol, selectedModel, upstreamModel st
 	cfg := config.DefaultConfig()
 	cfg.Upstream = upstream
 	cfg.UpstreamProtocol = protocol
-	for k := range cfg.Models {
-		cfg.Models[k] = ""
+	cfg.Upstreams = map[string]*config.Upstream{
+		"default": {
+			URL:      upstream,
+			Protocol: protocol,
+			Default:  true,
+		},
 	}
-	cfg.Models[selectedModel] = upstreamModel
+	for k := range cfg.RawModels {
+		cfg.RawModels[k] = ""
+	}
+	cfg.RawModels[selectedModel] = upstreamModel
 	return writeConfigFile(path, cfg)
 }
 
@@ -369,5 +376,9 @@ func finishWizard(configPath string, out io.Writer, upstream, protocol, selected
 	}
 
 	fmt.Fprintf(out, "[init] 配置已写入 %s\n", configPath)
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Tip: To add multiple upstreams, edit the config file manually:")
+	fmt.Fprintln(out, "  Add upstreams in [upstreams], then use")
+	fmt.Fprintln(out, `  { upstream = "name", model = "model-name" } format in [models] to route to specific upstream.`)
 	return nil
 }

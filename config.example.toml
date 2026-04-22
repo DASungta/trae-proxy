@@ -1,56 +1,34 @@
 # trae-proxy configuration
 
-# Upstream API address
-# 上游服务地址，路径支持完整地址或基地址
-# 示例：- 移动云：OpenAI：https://ai.bayesdl.com/api/maas/
-# 示例：- 京东云：OpenAI：https://modelservice.jdcloud.com/coding/openai
-# 示例：- 京东云：Anthropic：https://modelservice.jdcloud.com/coding/anthropic
-# 示例：- sub2api：直接填端点地址
-upstream = "http://192.168.48.12:8080"
-
-# Upstream protocol: "anthropic" (default) performs OpenAI → Anthropic Messages
-# conversion. "openai" directly forwards OpenAI Chat Completions — use this when
-# upstream is OpenAI-compatible (LM Studio, Ollama, most relays).
-# 上游服务是Anthropic协议填anthropic，如果是openai兼容填openai
-upstream_protocol = "anthropic"
-
 # HTTPS listen address
 listen = ":443"
 
 # Domain to hijack via /etc/hosts
 hijack = "openrouter.ai"
 
+# Log level: error | warn | info (default) | debug | trace
+log_level = "info"
+
+# When true, the trace level prints full request/response bodies.
+log_body = false
+
+# Upstream config (supports multiple named upstreams)
+[upstreams.default]
+url = "http://192.168.48.12:8080"
+protocol = "anthropic"
+default = true
+
+# Multi-upstream example:
+# [upstreams.openai_official]
+# url = "https://api.openai.com"
+# protocol = "openai"
+
 # When true, GET /v1/models forwards to the real hijack domain (bypassing /etc/hosts)
 # instead of returning the fake list from [models] below.
 # real_models = false
 
-# Model mapping: request model name → upstream model name
-# 3-tier fallback: exact match → strip "anthropic/" prefix → passthrough
-# 如果劫持openrouter，模型名称是有"anthropic/"、"openai/"等前缀
-# 以下是当前Trae中OpenRouter列出的模型，任选一个将请求模型映射到上游服务提供的真实模型
 [models]
-# 海外版 Trae 当前展示的最新模型
+# Old format: uses default upstream
 "anthropic/claude-sonnet-4.6" = "claude-sonnet-4.6"
-"anthropic/claude-opus-4.6" = "claude-opus-4.6"
-"anthropic/claude-haiku-4.5" = ""
-"openai/gpt-oss-120b" = "gpt-5.4"
-"openai/gpt-5.4" = ""
-"openai/gpt-5.4-mini" = ""
-"google/gemini-3.1-pro-preview" = ""
-"google/gemini-3.1-flash-lite-preview" = ""
-"minimax/minimax-m2.7" = ""
-"qwen/qwen3-coder-next" = ""
-"z-ai/glm-5" = ""
-# 国内版 Trae 仍展示的老模型
-"anthropic/claude-sonnet-4.5" = "claude-sonnet-4.6"
-"anthropic/claude-opus-4.1" = "claude-opus-4.6"
-"anthropic/claude-4-sonnet" = "claude-sonnet-4.6"
-"anthropic/claude-4-opus" = "claude-opus-4.6"
-"anthropic/claude-3.7-sonnet" = "claude-sonnet-4.6"
-"openai/gpt-5" = "gpt-5.4"
-"openai/gpt-4.1" = "gpt-5.4-mini"
-"openai/gpt-4o" = "gpt-5.4-mini"
-"google/gemini-3-pro-preview" = ""
-"google/gemini-2.5-pro" = ""
-"minimax/minimax-m2" = ""
-"qwen/qwen3-coder" = ""
+# New format: route to specific upstream
+# "openai/gpt-4o" = { upstream = "openai_official", model = "gpt-4o" }

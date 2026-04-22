@@ -11,7 +11,7 @@ import (
 func TestServeFakeModelsOpenRouterFormat(t *testing.T) {
 	s := &Server{
 		Config: &config.Config{
-			Models: map[string]string{
+			RawModels: map[string]any{
 				"anthropic/claude-sonnet-4.5": "",
 				"openai/gpt-5":                "",
 			},

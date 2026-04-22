@@ -306,11 +306,18 @@ func statusCmd() *cobra.Command {
 			}
 
 			fmt.Println()
-			fmt.Printf("Upstream: %s\n", cfg.Upstream)
-			fmt.Printf("Protocol: %s\n", cfg.UpstreamProtocol)
+			defaultUpstream := cfg.DefaultUpstream()
+			if defaultUpstream != nil {
+				fmt.Printf("Upstream: %s\n", defaultUpstream.URL)
+				fmt.Printf("Protocol: %s\n", defaultUpstream.Protocol)
+			} else {
+				fmt.Printf("Upstream: %s\n", cfg.Upstream)
+				fmt.Printf("Protocol: %s\n", cfg.UpstreamProtocol)
+			}
+			fmt.Printf("Upstreams: %d configured\n", len(cfg.Upstreams))
 			fmt.Printf("Listen:   %s\n", cfg.Listen)
 			fmt.Printf("Hijack:   %s\n", cfg.Hijack)
-			fmt.Printf("Models:   %d mappings\n", len(cfg.Models))
+			fmt.Printf("Models:   %d mappings\n", len(cfg.ModelIDs()))
 			return nil
 		},
 	}
@@ -473,6 +480,21 @@ func updateCmd() *cobra.Command {
 				}
 			}
 
+			dir, err := config.ConfigDir()
+			if err == nil {
+				configPath := filepath.Join(dir, "config.toml")
+				cfg, loadErr := config.Load(configPath, nil)
+				if loadErr == nil {
+					if changed, report, migrateErr := config.Migrate(configPath, cfg); migrateErr != nil {
+						return fmt.Errorf("migrate config: %w", migrateErr)
+					} else if changed {
+						for _, msg := range report {
+							fmt.Printf("[migrate] %s\n", msg)
+						}
+					}
+				}
+			}
+
 			fmt.Printf("[update] updated from %s to %s\n", oldVersion, tag)
 			PrintMigrationGuide(oldVersion, tag)
 			if pid, running := daemon.IsRunning(); running {
@@ -564,12 +586,6 @@ func runProxy(opts startOptions) error {
 	cfg, err := config.Load(configPath, opts.overrides())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
-	}
-
-	if changed, report := config.Migrate(configPath, cfg); changed {
-		for _, msg := range report {
-			fmt.Printf("[migrate] %s\n", msg)
-		}
 	}
 
 	fmt.Printf("[start] adding hosts entry for %s...\n", cfg.Hijack)

@@ -7,7 +7,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zhangyc/trae-proxy/internal/config"
@@ -20,6 +22,9 @@ type Server struct {
 	HTTPClient   *http.Client
 	BypassClient *http.Client // uses public DNS (1.1.1.1), ignores /etc/hosts
 	TLSConfig    *tls.Config
+
+	clientCache map[string]*http.Client // key: scheme://host
+	clientMu    sync.RWMutex
 }
 
 type serverErrorLogWriter struct {
@@ -35,9 +40,35 @@ func (w *serverErrorLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func buildHTTPClient() *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           dialer.DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 60 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			MaxIdleConns:          20,
+			MaxIdleConnsPerHost:   20,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+func extractHostKey(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return rawURL
+	}
+	return parsed.Scheme + "://" + parsed.Host
+}
+
 func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
-	// BypassClient: custom resolver via 1.1.1.1 to bypass the /etc/hosts hijack.
-	// PreferGo forces the pure-Go DNS resolver, enabling the custom Dial.
 	resolver := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -51,7 +82,7 @@ func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
 		KeepAlive: 30 * time.Second,
 	}
 	bypassClient := &http.Client{
-		Timeout: 30 * time.Second, // BypassClient 只用于 /v1/models，不涉及流式，保留整体超时
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return bypassDialer.DialContext(ctx, network, addr)
@@ -62,36 +93,47 @@ func NewServer(cfg *config.Config, logger *logging.Logger) *Server {
 		},
 	}
 
-	// HTTPClient 用于所有上游代理请求（包括 SSE 流式响应）。
-	// 不设 http.Client.Timeout — 该字段覆盖整个请求生命周期含响应体读取，
-	// 会强制切断仍在传输的 SSE 流。改用 Transport 分阶段超时：
-	//   - DialContext/TLSHandshakeTimeout 覆盖连接建立阶段
-	//   - ResponseHeaderTimeout 防止上游不响应 header（挂起连接）
-	//   - IdleConnTimeout 回收空闲连接
-	// 客户端断开由 context 传播 + 写错误检测共同兜底。
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
+	s := &Server{
+		Config:       cfg,
+		Logger:       logger,
+		BypassClient: bypassClient,
+		clientCache:  make(map[string]*http.Client),
+	}
+	if upstream := cfg.DefaultUpstream(); upstream != nil {
+		s.HTTPClient = s.clientFor(upstream)
+	} else {
+		s.HTTPClient = buildHTTPClient()
+	}
+	for _, upstream := range cfg.Upstreams {
+		s.clientFor(upstream)
+	}
+	return s
+}
+
+func (s *Server) clientFor(u *config.Upstream) *http.Client {
+	if u == nil {
+		if s.HTTPClient != nil {
+			return s.HTTPClient
+		}
+		return buildHTTPClient()
 	}
 
-	return &Server{
-		Config: cfg,
-		Logger: logger,
-		HTTPClient: &http.Client{
-			Transport: &http.Transport{
-				DialContext:           dialer.DialContext,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: 60 * time.Second,
-				IdleConnTimeout:       90 * time.Second,
-				MaxIdleConns:          20,
-				MaxIdleConnsPerHost:   20, // 所有流量到同一上游 host，默认值 2 会导致频繁建连
-			},
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
-		},
-		BypassClient: bypassClient,
+	key := extractHostKey(u.URL)
+	s.clientMu.RLock()
+	if c, ok := s.clientCache[key]; ok {
+		s.clientMu.RUnlock()
+		return c
 	}
+	s.clientMu.RUnlock()
+
+	s.clientMu.Lock()
+	defer s.clientMu.Unlock()
+	if c, ok := s.clientCache[key]; ok {
+		return c
+	}
+	c := buildHTTPClient()
+	s.clientCache[key] = c
+	return c
 }
 
 func (s *Server) Handler() http.Handler {
@@ -106,29 +148,21 @@ func (s *Server) Handler() http.Handler {
 		case r.Method == "GET" && norm == "v1/models":
 			HandleModels(s)(w, r)
 		case r.Method == "POST" && norm == "v1/chat/completions":
-			if s.Config.UpstreamProtocol == "openai" {
-				HandleForward(s.Config, s.Logger, s.HTTPClient)(w, r)
-			} else {
-				HandleChatCompletions(s.Config, s.Logger, s.HTTPClient)(w, r)
-			}
+			HandleChatCompletions(s)(w, r)
 		default:
-			HandleForward(s.Config, s.Logger, s.HTTPClient)(w, r)
+			HandleForward(s)(w, r)
 		}
 	})
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	srv := &http.Server{
-		Addr:     s.Config.Listen,
-		Handler:  s.Handler(),
-		ErrorLog: log.New(&serverErrorLogWriter{logger: s.Logger}, "", 0),
-		// ReadHeaderTimeout 防止 slowloris 攻击（慢速发送请求头）
+		Addr:              s.Config.Listen,
+		Handler:           s.Handler(),
+		ErrorLog:          log.New(&serverErrorLogWriter{logger: s.Logger}, "", 0),
 		ReadHeaderTimeout: 10 * time.Second,
-		// ReadTimeout 覆盖读取完整请求（header + body）的最大时长
-		ReadTimeout: 60 * time.Second,
-		// IdleTimeout 限制 keep-alive 空闲连接的保留时长
-		IdleTimeout: 120 * time.Second,
-		// WriteTimeout 不设：SSE 流式响应需要长期写入，由写错误检测 + context 取消兜底
+		ReadTimeout:       60 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	if s.TLSConfig != nil {
@@ -142,16 +176,20 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 	go func() {
 		<-ctx.Done()
-		// 30s 内等待在途请求完成；超时后强制关闭，避免 SSE 流导致进程永远挂起
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
 		srv.Shutdown(shutdownCtx)
 	}()
 
+	defaultUpstream := s.Config.DefaultUpstream()
+	defaultURL := ""
+	if defaultUpstream != nil {
+		defaultURL = defaultUpstream.URL
+	}
 	s.Logger.Info("listening",
 		"addr", s.Config.Listen,
-		"upstream", s.Config.Upstream,
-		"protocol", s.Config.UpstreamProtocol,
+		"default_upstream", defaultURL,
+		"upstream_count", len(s.Config.Upstreams),
 	)
 
 	if s.TLSConfig != nil {
